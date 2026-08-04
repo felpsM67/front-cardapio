@@ -1,0 +1,1 @@
+import {Outlet} from 'react-router-dom';import {Header} from '../components/layout/Header';import {configService} from '../services/configService';export function CustomerLayout(){const c=configService.get();return <div style={{'--primary':c.primaryColor} as React.CSSProperties}><Header/><Outlet/></div>}

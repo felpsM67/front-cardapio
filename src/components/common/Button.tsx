@@ -1,0 +1,1 @@
+import type {ButtonHTMLAttributes} from 'react';export function Button({className='',style,...props}:ButtonHTMLAttributes<HTMLButtonElement>){return <button style={{backgroundColor:'var(--primary)',...style}} className={`rounded-xl px-4 py-3 font-semibold text-white transition hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-50 ${className}`} {...props}/>};

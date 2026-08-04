@@ -1,0 +1,27 @@
+import {useState} from 'react';
+import {Link,useNavigate} from 'react-router-dom';
+import {MapPin,Minus,Pencil,Plus,Trash2} from 'lucide-react';
+import {useCart} from '../../contexts/CartContext';
+import {formatCurrency} from '../../utils/format';
+import {configService} from '../../services/configService';
+import {Button} from '../../components/common/Button';
+import {Input} from '../../components/common/Input';
+import type {Address} from '../../models';
+import {STORAGE_KEYS} from '../../constants/storage';
+import {storageService} from '../../services/storageService';
+
+const blank:Address={id:'checkout-address',label:'Casa',cep:'',street:'',number:'',complement:'',district:'',city:'Dourados',state:'MS',reference:'',isDefault:true};
+export function CartPage(){
+ const c=useCart();const nav=useNavigate();const config=configService.get();
+ const[address,setAddress]=useState<Address>(()=>storageService.get(STORAGE_KEYS.CHECKOUT_ADDRESS,blank));
+ const[editing,setEditing]=useState(()=>!address.street);
+ const set=(k:keyof Address,v:string|boolean)=>setAddress(a=>({...a,[k]:v} as Address));
+ function saveAddress(){if(!address.cep||!address.street||!address.number||!address.district||!address.city||!address.state)return alert('Preencha CEP, rua, número, bairro, cidade e estado.');storageService.set(STORAGE_KEYS.CHECKOUT_ADDRESS,address);setEditing(false)}
+ function next(){if(editing||!address.street)return alert('Salve o endereço de entrega antes de continuar.');nav('/identificacao')}
+ if(!c.items.length)return <div className="mx-auto max-w-xl px-4 py-24 text-center"><h1 className="text-3xl font-black">Seu carrinho está vazio</h1><Link to="/" className="mt-5 inline-block" style={{color:'var(--primary)'}}>Voltar ao cardápio</Link></div>;
+ return <div className="mx-auto max-w-3xl px-4 py-10"><h1 className="text-3xl font-black">Carrinho</h1>
+ <section className="mt-6 rounded-2xl border bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><MapPin style={{color:'var(--primary)'}}/><div><h2 className="font-black">Endereço de entrega</h2><p className="text-sm text-slate-500">Confirme onde o pedido será entregue.</p></div></div>{!editing&&<button onClick={()=>setEditing(true)} className="flex shrink-0 items-center gap-1 text-sm font-bold" style={{color:'var(--primary)'}}><Pencil size={16}/>Modificar</button>}</div>
+ {editing?<div className="mt-4 grid gap-3 sm:grid-cols-2"><select value={address.label} onChange={e=>set('label',e.target.value)} className="rounded-xl border px-4 py-3"><option>Casa</option><option>Apartamento</option><option>Trabalho</option></select><Input placeholder="CEP *" value={address.cep} onChange={e=>set('cep',e.target.value)}/><Input className="sm:col-span-2" placeholder="Rua *" value={address.street} onChange={e=>set('street',e.target.value)}/><Input placeholder="Número *" value={address.number} onChange={e=>set('number',e.target.value)}/><Input placeholder="Complemento" value={address.complement||''} onChange={e=>set('complement',e.target.value)}/><Input placeholder="Bairro *" value={address.district} onChange={e=>set('district',e.target.value)}/><Input placeholder="Cidade *" value={address.city} onChange={e=>set('city',e.target.value)}/><Input placeholder="Estado *" value={address.state} onChange={e=>set('state',e.target.value)}/><Input className="sm:col-span-2" placeholder="Ponto de referência" value={address.reference||''} onChange={e=>set('reference',e.target.value)}/><Button type="button" className="sm:col-span-2" onClick={saveAddress}>Salvar endereço</Button></div>:<div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm"><b>{address.label}</b><p>{address.street}, {address.number}{address.complement?` — ${address.complement}`:''}</p><p>{address.district}, {address.city}/{address.state} · CEP {address.cep}</p>{address.reference&&<p className="mt-1 text-slate-500">Referência: {address.reference}</p>}</div>}</section>
+ <h2 className="mt-8 text-xl font-black">Seu pedido</h2><div className="mt-3 space-y-3">{c.items.map(i=><div key={i.id} className="flex gap-3 rounded-2xl border bg-white p-3"><img src={i.product.imageUrl} className="h-20 w-20 rounded-xl object-cover"/><div className="flex-1"><b>{i.product.name}</b>{i.selectedOptions.length>0&&<p className="text-xs text-slate-500">{i.selectedOptions.map(x=>`${x.quantity ?? 1}x ${x.name}`).join(', ')}</p>}{i.notes&&<p className="text-xs text-slate-500">Obs.: {i.notes}</p>}<div className="mt-2 flex items-center justify-between"><span>{formatCurrency(i.unitPrice*i.quantity)}</span><div className="flex items-center gap-3"><button onClick={()=>c.update(i.id,i.quantity-1)}><Minus size={18}/></button><b>{i.quantity}</b><button onClick={()=>c.update(i.id,i.quantity+1)}><Plus size={18}/></button><button onClick={()=>c.remove(i.id)} className="text-red-600"><Trash2 size={18}/></button></div></div></div></div>)}</div>
+ <div className="mt-6 rounded-2xl bg-slate-50 p-5"><div className="flex justify-between"><span>Subtotal</span><b>{formatCurrency(c.subtotal)}</b></div><div className="mt-2 flex justify-between"><span>Entrega</span><b>{formatCurrency(config.deliveryFee)}</b></div><div className="mt-4 flex justify-between border-t pt-4 text-xl"><b>Total</b><b>{formatCurrency(c.subtotal+config.deliveryFee)}</b></div></div><Button className="mt-5 w-full" onClick={next}>Continuar pedido</Button></div>;
+}

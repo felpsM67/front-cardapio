@@ -1,0 +1,3 @@
+import type {OrderStatus} from '../models';
+export const orderStatusLabel:Record<OrderStatus,string>={pending:'Novo',sent:'Enviado',confirmed:'Confirmado',preparing:'Em preparo',ready:'Pronto para entrega',out_for_delivery:'Saiu para entrega',delivered:'Entregue',cancelled:'Cancelado'};
+export const orderStatusClass:Record<OrderStatus,string>={pending:'bg-amber-100 text-amber-700',sent:'bg-blue-100 text-blue-700',confirmed:'bg-indigo-100 text-indigo-700',preparing:'bg-orange-100 text-orange-700',ready:'bg-cyan-100 text-cyan-700',out_for_delivery:'bg-violet-100 text-violet-700',delivered:'bg-emerald-100 text-emerald-700',cancelled:'bg-red-100 text-red-700'};

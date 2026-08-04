@@ -1,0 +1,1 @@
+export const formatCurrency=(value:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value);export const formatPhone=(value:string)=>value.replace(/\D/g,'').slice(0,11).replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2');export const onlyDigits=(value:string)=>value.replace(/\D/g,'');
