@@ -22,7 +22,7 @@ export function AdminLoginPage() {
     setLoading(false);
 
     if (authenticated) {
-      navigate('/admin');
+      navigate(authService.getAdminStartPath());
       return;
     }
 
@@ -62,8 +62,6 @@ export function AdminLoginPage() {
             <div className="relative">
               <Input
                 required
-                minLength={6}
-                maxLength={8}
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 value={password}

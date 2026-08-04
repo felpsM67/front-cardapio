@@ -1,5 +1,6 @@
 import type { Product } from '../models';
 import { apiClient } from '../api/apiClient';
+import { mockProducts } from '../data/mockProducts';
 import { categoryRepository } from './categoryRepository';
 
 interface ApiProduct {
@@ -62,8 +63,15 @@ export const productRepository = {
   getAll: () => [...products],
 
   async load(): Promise<void> {
-    const response = await apiClient.get<ApiProduct[]>('/pratos');
-    products = response.map(mapProduct);
+    try {
+      const response = await apiClient.get<ApiProduct[]>('/pratos');
+      products = response.map(mapProduct);
+      return;
+    } catch (error) {
+      console.warn('Usando dados locais para produtos porque a API não respondeu.', error);
+    }
+
+    products = mockProducts.map((item) => ({ ...item }));
   },
 
   async create(

@@ -28,12 +28,16 @@ export function HomePage() {
   const filteredProducts = useMemo(
     () =>
       products.filter(
-        (product) =>
-          product.available &&
-          (category === 'all' || product.categoryId === category) &&
-          `${product.name} ${product.description}`
-            .toLowerCase()
-            .includes(search.toLowerCase()),
+        (product) => {
+          const query = String(search ?? '').trim().toLowerCase();
+          const haystack = `${product.name ?? ''} ${product.description ?? ''}`.toLowerCase();
+
+          return (
+            product.available &&
+            (category === 'all' || product.categoryId === category) &&
+            haystack.includes(query)
+          );
+        },
       ),
     [products, category, search],
   );

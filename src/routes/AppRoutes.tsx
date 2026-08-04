@@ -8,7 +8,7 @@ import { PaymentPage } from '../pages/customer/PaymentPage';
 import { ReviewPage } from '../pages/customer/ReviewPage';
 import { SuccessPage } from '../pages/customer/SuccessPage';
 import { AdminLoginPage } from '../pages/admin/AdminLoginPage';
-import { ProtectedRoute } from './ProtectedRoute';
+import { ProtectedRoute, RoleProtectedRoute } from './ProtectedRoute';
 import { AdminLayout } from '../layouts/AdminLayout';
 import { DashboardPage } from '../pages/admin/DashboardPage';
 import { ProductsPage } from '../pages/admin/ProductsPage';
@@ -40,18 +40,37 @@ export function AppRoutes() {
 
         <Route element={<ProtectedRoute />}>
           <Route element={<AdminLayout />}>
-            <Route path="/admin" element={<DashboardPage />} />
-            <Route path="/admin/pedidos" element={<OrdersPage />} />
-            <Route path="/admin/caixa" element={<CashierPage />} />
-            <Route path="/admin/entregas" element={<DeliveryPage />} />
-            <Route path="/admin/produtos" element={<ProductsPage />} />
-            <Route path="/admin/adicionais" element={<Navigate to="/admin/produtos" replace />} />
-            <Route path="/admin/categorias" element={<CategoriesPage />} />
-            <Route path="/admin/promocoes" element={<PromotionsPage />} />
-            <Route path="/admin/funcionarios" element={<EmployeesPage />} />
-            <Route path="/admin/entregadores" element={<CouriersPage />} />
-            <Route path="/admin/cargos" element={<RolesPage />} />
-            <Route path="/admin/configuracoes" element={<SettingsPage />} />
+            <Route element={<RoleProtectedRoute allowedRoles={['manager']} />}>
+              <Route path="/admin" element={<DashboardPage />} />
+              <Route path="/admin/produtos" element={<ProductsPage />} />
+              <Route
+                path="/admin/adicionais"
+                element={<Navigate to="/admin/produtos/:id" replace />}
+              />
+              <Route path="/admin/categorias" element={<CategoriesPage />} />
+              <Route path="/admin/promocoes" element={<PromotionsPage />} />
+              <Route path="/admin/funcionarios" element={<EmployeesPage />} />
+              <Route path="/admin/entregadores" element={<CouriersPage />} />
+              <Route path="/admin/cargos" element={<RolesPage />} />
+              <Route path="/admin/configuracoes" element={<SettingsPage />} />
+            </Route>
+
+            <Route
+              element={
+                <RoleProtectedRoute allowedRoles={['manager', 'cashier']} />
+              }
+            >
+              <Route path="/admin/pedidos" element={<OrdersPage />} />
+              <Route path="/admin/caixa" element={<CashierPage />} />
+            </Route>
+
+            <Route
+              element={
+                <RoleProtectedRoute allowedRoles={['manager', 'courier']} />
+              }
+            >
+              <Route path="/admin/entregas" element={<DeliveryPage />} />
+            </Route>
           </Route>
         </Route>
 

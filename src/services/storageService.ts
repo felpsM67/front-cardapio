@@ -6,6 +6,9 @@ const TEMPORARY_KEYS = new Set([
   'digital-menu-admin-session',
   'digital-menu-checkout-payment',
   'digital-menu-checkout-address',
+  'digital-menu-addresses',
+  'digital-menu-addons',
+  'digital-menu-addon-catalog',
 ]);
 
 function scopedKey(storeId: string, key: string): string {

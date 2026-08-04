@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Address, Order, Payment } from '../../models';
+import type { Address, Customer, Order, Payment } from '../../models';
 import { useCart } from '../../contexts/CartContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storageService';
@@ -29,18 +29,37 @@ export function ReviewPage() {
     null,
   );
   const config = configService.get();
+  const minimumOrder =
+    config.minimumOrder !== null && config.minimumOrder > 0
+      ? config.minimumOrder
+      : null;
+  const amountMissing = minimumOrder
+    ? Math.max(minimumOrder - cart.subtotal, 0)
+    : 0;
+  const minimumReached = !minimumOrder || amountMissing === 0;
 
   if (!customer || !address || !payment) {
     return <div className="p-10 text-center">Dados do checkout incompletos.</div>;
   }
 
-  const confirmedCustomer = customer;
+  const storedCustomer = storageService.get<Customer | null>(
+    STORAGE_KEYS.CUSTOMER,
+    null,
+  );
+  const confirmedCustomer = customer ?? storedCustomer;
   const confirmedAddress = address;
   const confirmedPayment = payment;
   const total = cart.subtotal + config.deliveryFee;
 
   async function finish() {
     setError('');
+
+    if (!minimumReached) {
+      setError(
+        `Faltam ${formatCurrency(amountMissing)} para atingir o pedido mínimo.`,
+      );
+      return;
+    }
     setSaving(true);
 
     const order: Order = {
@@ -115,6 +134,13 @@ export function ReviewPage() {
         </section>
       </div>
 
+      {!minimumReached && (
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+          Pedido mínimo de {formatCurrency(minimumOrder ?? 0)}. Adicione mais{' '}
+          {formatCurrency(amountMissing)} ao carrinho para finalizar.
+        </div>
+      )}
+
       {error && (
         <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
           {error}
@@ -126,10 +152,14 @@ export function ReviewPage() {
 
       <Button
         className="mt-6 w-full bg-green-600 hover:bg-green-700"
-        disabled={saving}
+        disabled={saving || !minimumReached}
         onClick={() => void finish()}
       >
-        {saving ? 'Salvando pedido...' : 'Finalizar pedido pelo WhatsApp'}
+        {saving
+          ? 'Salvando pedido...'
+          : minimumReached
+            ? 'Finalizar pedido pelo WhatsApp'
+            : `Faltam ${formatCurrency(amountMissing)}`}
       </Button>
     </div>
   );

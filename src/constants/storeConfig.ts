@@ -1,5 +1,5 @@
 import type {Role,StoreConfig} from '../models';
-export const defaultStoreConfig:StoreConfig={storeName:'Sabor Express',description:'Hambúrgueres artesanais, pizzas e porções',whatsappNumber:'5567999999999',pixKey:'chave-pix@exemplo.com',pixHolderName:'Sabor Express LTDA',deliveryFee:5,minimumOrder:20,estimatedTime:'35–50 min',openingHours:'18:00 às 23:30',isOpen:true,primaryColor:'#ea580c',coverUrl:'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1600&q=80'};
+export const defaultStoreConfig:StoreConfig={storeName:'Sabor Express',description:'Hambúrgueres artesanais, pizzas e porções',whatsappNumber:'5567999999999',pixKey:'chave-pix@exemplo.com',pixHolderName:'Sabor Express LTDA',deliveryFee:5,minimumOrder:null,menuSlug:'sabor-express',estimatedTime:'35–50 min',openingHours:'18:00 às 23:30',isOpen:true,primaryColor:'#ea580c',coverUrl:'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1600&q=80'};
 export const ADMIN_CREDENTIALS={email:'admin@cardapio.com',password:'admin123'};
 export const defaultRoles: Role[] = [
   {

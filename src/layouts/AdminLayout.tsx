@@ -16,29 +16,103 @@ import {
   ContactRound,
   X,
 } from 'lucide-react';
+import type { AdminRole } from '../constants/adminAccess';
+import { resolveAdminRole } from '../constants/adminAccess';
+import { STORAGE_KEYS } from '../constants/storage';
 import { authService } from '../services/authService';
 import { configService } from '../services/configService';
+import { storageService } from '../services/storageService';
 import { storeService } from '../services/storeService';
+
+interface AdminSession {
+  roleId?: string;
+}
+
+const links: Array<{
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  roles: AdminRole[];
+}> = [
+  {
+    to: '/admin',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    roles: ['manager'],
+  },
+  {
+    to: '/admin/pedidos',
+    label: 'Pedidos',
+    icon: ReceiptText,
+    roles: ['manager', 'cashier'],
+  },
+  {
+    to: '/admin/caixa',
+    label: 'Caixa',
+    icon: CookingPot,
+    roles: ['manager', 'cashier'],
+  },
+  {
+    to: '/admin/entregas',
+    label: 'Entregas',
+    icon: Bike,
+    roles: ['manager', 'courier'],
+  },
+  {
+    to: '/admin/produtos',
+    label: 'Produtos e adicionais',
+    icon: Package,
+    roles: ['manager'],
+  },
+  {
+    to: '/admin/categorias',
+    label: 'Categorias',
+    icon: Tags,
+    roles: ['manager'],
+  },
+  {
+    to: '/admin/promocoes',
+    label: 'Promoções',
+    icon: BadgePercent,
+    roles: ['manager'],
+  },
+  {
+    to: '/admin/funcionarios',
+    label: 'Funcionários',
+    icon: UserRoundCog,
+    roles: ['manager'],
+  },
+  {
+    to: '/admin/entregadores',
+    label: 'Entregadores',
+    icon: ContactRound,
+    roles: ['manager'],
+  },
+  {
+    to: '/admin/cargos',
+    label: 'Cargos',
+    icon: UsersRound,
+    roles: ['manager'],
+  },
+  {
+    to: '/admin/configuracoes',
+    label: 'Configurações',
+    icon: Settings,
+    roles: ['manager'],
+  },
+];
 
 export function AdminLayout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const config = configService.get();
   const currentStore = storeService.getCurrent();
-
-  const links = [
-    ['/admin', 'Dashboard', LayoutDashboard],
-    ['/admin/pedidos', 'Pedidos', ReceiptText],
-    ['/admin/caixa', 'Caixa', CookingPot],
-    ['/admin/entregas', 'Entregas', Bike],
-    ['/admin/produtos', 'Produtos e adicionais', Package],
-    ['/admin/categorias', 'Categorias', Tags],
-    ['/admin/promocoes', 'Promoções', BadgePercent],
-    ['/admin/funcionarios', 'Funcionários', UserRoundCog],
-    ['/admin/entregadores', 'Entregadores', ContactRound],
-    ['/admin/cargos', 'Cargos', UsersRound],
-    ['/admin/configuracoes', 'Configurações', Settings],
-  ] as const;
+  const session = storageService.get<AdminSession | null>(
+    STORAGE_KEYS.ADMIN_SESSION,
+    null,
+  );
+  const currentRole = resolveAdminRole(session?.roleId);
+  const visibleLinks = links.filter((link) => link.roles.includes(currentRole));
 
   function logout() {
     authService.adminLogout();
@@ -62,7 +136,7 @@ export function AdminLayout() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto">
-        {links.map(([to, label, Icon]) => (
+        {visibleLinks.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             end={to === '/admin'}

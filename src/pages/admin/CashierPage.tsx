@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   CheckCircle2,
   ChefHat,
@@ -37,6 +37,11 @@ const actions: {
 
 export function CashierPage() {
   const [, refresh] = useState(0);
+
+  useEffect(() => {
+    return orderService.subscribe(() => refresh((value) => value + 1));
+  }, []);
+
   const orders = orderService
     .getAll()
     .filter(
@@ -46,7 +51,6 @@ export function CashierPage() {
 
   function update(id: string, status: OrderStatus) {
     orderService.setStatus(id, status);
-    refresh((value) => value + 1);
   }
 
   function cancel(id: string) {
@@ -54,7 +58,6 @@ export function CashierPage() {
 
     if (reason) {
       orderService.cancel(id, reason);
-      refresh((value) => value + 1);
     }
   }
 

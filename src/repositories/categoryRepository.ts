@@ -1,5 +1,6 @@
 import type { Category } from '../models';
 import { apiClient } from '../api/apiClient';
+import { mockCategories } from '../data/mockCategories';
 
 interface ApiCategory {
   id: number;
@@ -37,8 +38,15 @@ export const categoryRepository = {
   getAll: () => [...categories],
 
   async load(): Promise<void> {
-    const response = await apiClient.get<ApiCategory[]>('/categorias');
-    categories = response.map(mapCategory);
+    try {
+      const response = await apiClient.get<ApiCategory[]>('/categorias');
+      categories = response.map(mapCategory);
+      return;
+    } catch (error) {
+      console.warn('Usando dados locais para categorias porque a API não respondeu.', error);
+    }
+
+    categories = mockCategories.map((item) => ({ ...item }));
   },
 
   async create(data: Omit<Category, 'id'>): Promise<Category> {

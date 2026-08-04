@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Eye,
   EyeOff,
@@ -14,17 +14,27 @@ import { employeeService } from '../../services/employeeService';
 import { roleService } from '../../services/roleService';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { onlyDigits } from '../../utils/format';
 
 const emptyForm = {
   name: '',
-  username: '',
+  email: '',
   password: '',
   phone: '',
   roleId: '',
   status: 'active' as EmployeeStatus,
 };
 
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(value.trim());
+}
+
+function normalizeText(value?: string | null): string {
+  return String(value ?? '').trim().toLowerCase();
+}
+
 export function EmployeesPage() {
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [, refresh] = useState(0);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -32,33 +42,45 @@ export function EmployeesPage() {
   const [form, setForm] = useState(emptyForm);
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState('');
-const [roles, setRoles] = useState<Role[]>([]);
-const [rolesError, setRolesError] = useState("");
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [rolesError, setRolesError] = useState('');
 
-useEffect(() => {
-  async function carregarCargos(): Promise<void> {
+  async function carregarFuncionarios(): Promise<void> {
     try {
-      const cargos = await roleService.getAll();
-      setRoles(cargos);
-    } catch (error) {
-      setRolesError(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível carregar os cargos.",
-      );
+      const funcionarios = await employeeService.getAll();
+      setEmployees(funcionarios);
+    } catch {
+      setEmployees([]);
     }
   }
 
-  void carregarCargos();
-}, []);
-  const employees = employeeService.getAll();
+  useEffect(() => {
+    async function carregarCargos(): Promise<void> {
+      try {
+        const cargos = await roleService.ensurePredefined();
+        setRoles(cargos);
+      } catch (error) {
+        setRolesError(
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível carregar os cargos.',
+        );
+      }
+    }
+
+    void carregarCargos();
+  }, []);
+
+  useEffect(() => {
+    void carregarFuncionarios();
+  }, []);
 
   const filtered = useMemo(() => {
-    const value = search.trim().toLowerCase();
+    const value = normalizeText(search);
     if (!value) return employees;
 
     return employees.filter((employee) =>
-      [employee.name, employee.username, employee.phone]
+      [employee.name ?? '', employee.email ?? '', employee.phone ?? '']
         .join(' ')
         .toLowerCase()
         .includes(value),
@@ -77,7 +99,7 @@ useEffect(() => {
     setEditingId(employee.id);
     setForm({
       name: employee.name,
-      username: employee.username,
+      email: employee.email,
       password: employee.password,
       phone: employee.phone,
       roleId: employee.roleId,
@@ -88,61 +110,85 @@ useEffect(() => {
     setModalOpen(true);
   }
 
-  function save(event: React.FormEvent) {
+  async function save(event: React.FormEvent) {
     event.preventDefault();
     setFormError('');
 
     if (
       !form.name.trim() ||
-      !form.username.trim() ||
+      !form.email.trim() ||
       !form.password ||
       !form.roleId
     ) {
-      setFormError('Preencha nome, usuário, senha e cargo.');
+      setFormError('Preencha nome, e-mail, senha e cargo.');
       return;
     }
 
-    if (form.username.trim().length < 3) {
-      setFormError('O nome de usuário deve ter pelo menos 3 caracteres.');
+    if (!isValidEmail(form.email)) {
+      setFormError('Informe um endereço de e-mail válido.');
       return;
     }
 
-    if (!/^[a-zA-Z0-9._-]+$/.test(form.username.trim())) {
-      setFormError(
-        'O usuário pode conter apenas letras, números, ponto, hífen e sublinhado.',
-      );
-      return;
-    }
+    const normalizedEmail = normalizeText(form.email);
+    const duplicates = employees.some(
+      (employee) =>
+        normalizeText(employee.email) === normalizedEmail &&
+        employee.id !== editingId,
+    );
 
-    if (form.password.length < 4) {
-      setFormError('A senha deve ter pelo menos 4 caracteres.');
-      return;
-    }
-
-    if (employeeService.usernameExists(form.username, editingId ?? undefined)) {
-      setFormError('Esse nome de usuário já está sendo utilizado.');
+    if (duplicates) {
+      setFormError('Esse e-mail já está sendo utilizado.');
       return;
     }
 
     const data = {
       ...form,
       name: form.name.trim(),
-      username: form.username.trim(),
-      phone: form.phone.trim(),
+      email: normalizedEmail,
+      phone: onlyDigits(form.phone),
     };
 
-    if (editingId) employeeService.update(editingId, data);
-    else employeeService.create(data);
+    try {
+      if (editingId) {
+        await employeeService.update(editingId, {
+          name: data.name,
+          email: data.email,
+          password: data.password,
+          phone: data.phone,
+          roleId: data.roleId,
+          status: data.status,
+        });
+      } else {
+        await employeeService.create({
+          name: data.name,
+          email: data.email,
+          password: data.password,
+          phone: data.phone,
+          roleId: data.roleId,
+          status: data.status,
+        });
+      }
 
-    setModalOpen(false);
-    refresh((value) => value + 1);
+      setModalOpen(false);
+      await carregarFuncionarios();
+      refresh((value) => value + 1);
+    } catch (error) {
+      setFormError(
+        error instanceof Error ? error.message : 'Não foi possível salvar o funcionário.',
+      );
+    }
   }
 
-  function toggle(employee: Employee) {
-    employeeService.update(employee.id, {
-      status: employee.status === 'active' ? 'inactive' : 'active',
-    });
-    refresh((value) => value + 1);
+  async function toggle(employee: Employee) {
+    try {
+      await employeeService.update(employee.id, {
+        status: employee.status === 'active' ? 'inactive' : 'active',
+      });
+      await carregarFuncionarios();
+      refresh((value) => value + 1);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Não foi possível alterar o status.');
+    }
   }
 
   return (
@@ -154,7 +200,7 @@ useEffect(() => {
             <h1 className="text-3xl font-black">Funcionários</h1>
           </div>
           <p className="mt-1 text-slate-500">
-            Cadastre o acesso, a senha e o cargo de cada funcionário.
+            Cadastre o e-mail, a senha e o cargo de cada funcionário.
           </p>
         </div>
 
@@ -168,10 +214,16 @@ useEffect(() => {
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar por nome, usuário ou telefone"
+          placeholder="Buscar por nome, e-mail ou telefone"
           className="border-0 p-0 focus:ring-0"
         />
       </div>
+
+      {rolesError && (
+        <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-medium text-red-700">
+          {rolesError}
+        </p>
+      )}
 
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((employee) => {
@@ -189,7 +241,7 @@ useEffect(() => {
                     {employee.name}
                   </h2>
                   <p className="truncate text-sm font-bold text-slate-700">
-                    @{employee.username}
+                    {employee.email}
                   </p>
                   <p className="text-sm text-slate-500">
                     {employee.phone || 'Sem telefone'}
@@ -240,11 +292,23 @@ useEffect(() => {
 
                 {employee.id !== 'employee-admin' && (
                   <button
-                    onClick={() =>
-                      confirm('Excluir este funcionário?') &&
-                      (employeeService.remove(employee.id),
-                      refresh((value) => value + 1))
-                    }
+                    onClick={() => {
+                      if (!confirm('Excluir este funcionário?')) return;
+
+                      void (async () => {
+                        try {
+                          await employeeService.remove(employee.id);
+                          await carregarFuncionarios();
+                          refresh((value) => value + 1);
+                        } catch (error) {
+                          alert(
+                            error instanceof Error
+                              ? error.message
+                              : 'Não foi possível excluir o funcionário.',
+                          );
+                        }
+                      })();
+                    }}
                     className="rounded-xl bg-red-50 p-2 text-red-600"
                     aria-label="Excluir funcionário"
                   >
@@ -269,7 +333,7 @@ useEffect(() => {
                   {editingId ? 'Editar funcionário' : 'Novo funcionário'}
                 </h2>
                 <p className="text-sm text-slate-500">
-                  O usuário e a senha serão utilizados no login administrativo.
+                  O e-mail e a senha serão utilizados no login administrativo.
                 </p>
               </div>
 
@@ -295,19 +359,20 @@ useEffect(() => {
               </label>
 
               <label className="grid gap-2 text-sm font-bold">
-                Nome de usuário
+                E-mail
                 <Input
                   required
-                  minLength={3}
-                  autoComplete="off"
-                  value={form.username}
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  value={form.email}
                   onChange={(event) =>
-                    setForm({ ...form, username: event.target.value })
+                    setForm({ ...form, email: event.target.value })
                   }
-                  placeholder="Ex.: joao.caixa"
+                  placeholder="funcionario@empresa.com"
                 />
                 <span className="text-xs font-normal text-slate-500">
-                  Aceita letras, números, ponto, hífen e sublinhado.
+                  Esse e-mail será utilizado para acessar o painel administrativo.
                 </span>
               </label>
 
@@ -316,7 +381,6 @@ useEffect(() => {
                 <div className="relative">
                   <Input
                     required
-                    minLength={4}
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="new-password"
                     value={form.password}
@@ -336,13 +400,20 @@ useEffect(() => {
                 </div>
               </label>
 
-
               <label className="grid gap-2 text-sm font-bold">
                 Telefone
                 <Input
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={11}
+                  placeholder="67999999999"
                   value={form.phone}
                   onChange={(event) =>
-                    setForm({ ...form, phone: event.target.value })
+                    setForm({
+                      ...form,
+                      phone: onlyDigits(event.target.value).slice(0, 11),
+                    })
                   }
                 />
               </label>

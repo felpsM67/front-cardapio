@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Check,
   Pencil,
@@ -33,33 +33,7 @@ const emptyProduct = (): Omit<Product, 'id' | 'createdAt' | 'updatedAt'> => ({
   order: 1,
 });
 
-function loadCatalogWithLegacyItems(): AddonCatalogItem[] {
-  const catalog = addonCatalogService.getAll();
-  const knownIds = new Set(catalog.map((item) => item.id));
-  const timestamp = new Date().toISOString();
-  const legacyItems: AddonCatalogItem[] = [];
 
-  addonService.getAll().forEach((group) => {
-    group.items.forEach((item) => {
-      if (!knownIds.has(item.id)) {
-        knownIds.add(item.id);
-        legacyItems.push({
-          ...item,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        });
-      }
-    });
-  });
-
-  if (legacyItems.length) {
-    const merged = [...catalog, ...legacyItems];
-    addonCatalogService.save(merged);
-    return merged;
-  }
-
-  return catalog;
-}
 
 export function ProductsPage() {
   const [, refresh] = useState(0);
@@ -67,9 +41,7 @@ export function ProductsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyProduct());
   const [addonItems, setAddonItems] = useState<ProductOptionItem[]>([]);
-  const [catalogItems, setCatalogItems] = useState<AddonCatalogItem[]>(
-    loadCatalogWithLegacyItems,
-  );
+  const [catalogItems, setCatalogItems] = useState<AddonCatalogItem[]>([]);
   const [addonSearch, setAddonSearch] = useState('');
   const [showAddonForm, setShowAddonForm] = useState(false);
   const [editingAddonId, setEditingAddonId] = useState<string | null>(null);
@@ -81,7 +53,24 @@ export function ProductsPage() {
 
   const filteredCatalog = useMemo(() => {
     const search = addonSearch.trim().toLocaleLowerCase('pt-BR');
+  useEffect(() => {
+  async function loadCatalog(): Promise<void> {
+    try {
+      const items = await addonCatalogService.getAll();
+      setCatalogItems(items);
+    } catch (error) {
+      console.error('Erro ao carregar adicionais:', error);
 
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao carregar adicionais.',
+      );
+    }
+  }
+
+  void loadCatalog();
+}, []);
     if (!search) return catalogItems;
 
     return catalogItems.filter((item) =>
@@ -180,7 +169,7 @@ export function ProductsPage() {
     setShowAddonForm(true);
   }
 
-  function saveCatalogAddon() {
+    async function saveCatalogAddon(): Promise<void> {
     const name = addonForm.name.trim();
 
     if (!name) {
@@ -193,102 +182,173 @@ export function ProductsPage() {
       return;
     }
 
-    if (editingAddonId) {
-      addonCatalogService.update(editingAddonId, {
-        name,
-        price: addonForm.price,
-      });
+    try {
+      if (editingAddonId) {
+        const updated = await addonCatalogService.update(editingAddonId, {
+          name,
+          price: addonForm.price,
+        });
 
-      setAddonItems((current) =>
-        current.map((item) =>
-          item.id === editingAddonId
-            ? { ...item, name, price: addonForm.price }
-            : item,
-        ),
+        setCatalogItems((current) =>
+          current.map((item) =>
+            item.id === editingAddonId ? updated : item,
+          ),
+        );
+
+        setAddonItems((current) =>
+          current.map((item) =>
+            item.id === editingAddonId
+              ? {
+                  ...item,
+                  name: updated.name,
+                  price: updated.price,
+                  available: updated.available,
+                }
+              : item,
+          ),
+        );
+      } else {
+        const created = await addonCatalogService.create({
+          name,
+          price: addonForm.price,
+          available: true,
+        });
+
+        setCatalogItems((current) => [...current, created]);
+
+        setAddonItems((current) => [
+          ...current,
+          {
+            id: created.id,
+            name: created.name,
+            price: created.price,
+            available: created.available,
+          },
+        ]);
+      }
+
+      closeAddonForm();
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao salvar adicional.',
       );
-    } else {
-      const created = addonCatalogService.create({
-        name,
-        price: addonForm.price,
-        available: true,
-      });
-
-      setAddonItems((current) => [
-        ...current,
-        {
-          id: created.id,
-          name: created.name,
-          price: created.price,
-          available: created.available,
-        },
-      ]);
     }
-
-    setCatalogItems(addonCatalogService.getAll());
-    closeAddonForm();
   }
 
-  function toggleCatalogAvailability(item: AddonCatalogItem) {
-    addonCatalogService.update(item.id, { available: !item.available });
-    const updated = addonCatalogService.getAll();
-    setCatalogItems(updated);
+  async function toggleCatalogAvailability(
+  item: AddonCatalogItem,
+): Promise<void> {
+  try {
+    const updated = await addonCatalogService.update(item.id, {
+      available: !item.available,
+    });
 
-    if (item.available) {
+    setCatalogItems((current) =>
+      current.map((catalogItem) =>
+        catalogItem.id === item.id ? updated : catalogItem,
+      ),
+    );
+
+    if (!updated.available) {
       setAddonItems((current) =>
         current.filter((selected) => selected.id !== item.id),
       );
     }
+  } catch (error) {
+    alert(
+      error instanceof Error
+        ? error.message
+        : 'Erro ao alterar disponibilidade do adicional.',
+    );
+  }
+}
+
+ async function removeCatalogAddon(
+  item: AddonCatalogItem,
+): Promise<void> {
+  if (!confirm(`Excluir o adicional “${item.name}” da lista?`)) {
+    return;
   }
 
-  function removeCatalogAddon(item: AddonCatalogItem) {
-    if (!confirm(`Excluir o adicional “${item.name}” da lista?`)) return;
+  try {
+    await addonCatalogService.remove(item.id);
 
-    addonCatalogService.remove(item.id);
-    setCatalogItems(addonCatalogService.getAll());
+    setCatalogItems((current) =>
+      current.filter((catalogItem) => catalogItem.id !== item.id),
+    );
+
     setAddonItems((current) =>
       current.filter((selected) => selected.id !== item.id),
     );
+  } catch (error) {
+    alert(
+      error instanceof Error
+        ? error.message
+        : 'Erro ao excluir adicional.',
+    );
   }
+}
 
-  function saveAddons(productId: string, productName: string) {
-    const selectedIds = new Set(addonItems.map((item) => item.id));
-    const currentCatalog = addonCatalogService.getAll();
-    const cleanItems = currentCatalog
-      .filter((item) => selectedIds.has(item.id) && item.available)
-      .map(({ id, name, price, available }) => ({
-        id,
-        name,
-        price,
-        available,
-      }));
+async function saveAddons(
+  productId: string,
+  productName: string,
+): Promise<void> {
+  const selectedIds = new Set(
+    addonItems.map((item) => item.id),
+  );
 
-    const existingGroups = addonService.getAll();
-    const groupsWithoutProduct = existingGroups
-      .map((group) => ({
-        ...group,
-        applicableProductIds: group.applicableProductIds.filter(
+  const currentCatalog = await addonCatalogService.getAll();
+
+  const cleanItems = currentCatalog
+    .filter(
+      (item) =>
+        selectedIds.has(item.id) &&
+        item.available,
+    )
+    .map(({ id, name, price, available }) => ({
+      id,
+      name,
+      price,
+      available,
+    }));
+
+  const existingGroups = addonService.getAll();
+
+  const groupsWithoutProduct = existingGroups
+    .map((group) => ({
+      ...group,
+      applicableProductIds:
+        group.applicableProductIds.filter(
           (id) => id !== productId,
         ),
-      }))
-      .filter((group) => group.applicableProductIds.length > 0);
+    }))
+    .filter(
+      (group) =>
+        group.applicableProductIds.length > 0,
+    );
 
-    if (!cleanItems.length) {
-      addonService.save(groupsWithoutProduct);
-      return;
-    }
-
-    const group: AddonGroup = {
-      id: crypto.randomUUID(),
-      name: `Adicionais de ${productName}`,
-      required: false,
-      maxSelections,
-      active: true,
-      applicableProductIds: [productId],
-      items: cleanItems,
-    };
-
-    addonService.save([...groupsWithoutProduct, group]);
+  if (!cleanItems.length) {
+    addonService.save(groupsWithoutProduct);
+    return;
   }
+
+  const group: AddonGroup = {
+    id: crypto.randomUUID(),
+    name: `Adicionais de ${productName}`,
+    required: false,
+    maxSelections,
+    active: true,
+    applicableProductIds: [productId],
+    items: cleanItems,
+  };
+
+  addonService.save([
+    ...groupsWithoutProduct,
+    group,
+  ]);
+}
 
   async function saveProduct(event: React.FormEvent) {
     event.preventDefault();
@@ -304,12 +364,14 @@ export function ProductsPage() {
     }
 
     try {
-      if (editingId) {
-        await productService.update(editingId, form);
-      } else {
-        await productService.create(form);
-      }
+      const savedProduct = editingId
+        ? await productService.update(editingId, form)
+        : await productService.create(form);
 
+      await saveAddons(
+        savedProduct.id,
+        savedProduct.name,
+      );
       closeModal();
       refresh((value) => value + 1);
     } catch (error) {
@@ -391,21 +453,15 @@ export function ProductsPage() {
 
                   <div onClick={(event) => event.stopPropagation()}>
                     <Toggle
-                      checked={product.available}
-                      labelOn="No cardápio"
-                      labelOff="Oculto"
-                      onChange={async () => {
-                        try {
-                          await productService.toggleAvailability(product.id);
-                          refresh((value) => value + 1);
-                        } catch (error) {
-                          alert(
-                            error instanceof Error
-                              ? error.message
-                              : 'Erro ao alterar disponibilidade.',
-                          );
-                        }
-                      }}
+                      checked={form.available}
+                      labelOn="Ativo"
+                      labelOff="Inativo"
+                      onChange={() =>
+                        setForm((current) => ({
+                          ...current,
+                          available: !current.available,
+                        }))
+                      }
                     />
                   </div>
                 </div>
@@ -554,10 +610,16 @@ export function ProductsPage() {
 
                   <label className="flex items-center justify-between rounded-xl border p-3">
                     <span className="font-semibold">Produto no cardápio</span>
+
                     <Toggle
                       checked={form.available}
+                      labelOn="Ativo"
+                      labelOff="Inativo"
                       onChange={() =>
-                        setForm({ ...form, available: !form.available })
+                        setForm((current) => ({
+                          ...current,
+                          available: !current.available,
+                        }))
                       }
                     />
                   </label>
@@ -684,7 +746,10 @@ export function ProductsPage() {
                         }
                       />
 
-                      <Button type="button" onClick={saveCatalogAddon}>
+                      <Button
+                        type="button"
+                        onClick={() => void saveCatalogAddon()}
+                      >
                         {editingAddonId ? 'Atualizar' : 'Cadastrar'}
                       </Button>
                     </div>
@@ -760,7 +825,7 @@ export function ProductsPage() {
 
                             <button
                               type="button"
-                              onClick={() => removeCatalogAddon(item)}
+                              onClick={() => void removeCatalogAddon(item)}
                               className="rounded-lg p-2 text-red-500 hover:bg-red-50"
                               aria-label={`Excluir ${item.name}`}
                             >
@@ -823,7 +888,7 @@ export function ProductsPage() {
                 )}
               </section>
 
-              <Button className="w-full">
+              <Button className="w-full" type="submit">
                 {editingId ? 'Salvar produto e adicionais' : 'Adicionar item'}
               </Button>
             </div>

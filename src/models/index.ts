@@ -141,7 +141,8 @@ export interface StoreConfig {
   pixKey: string;
   pixHolderName: string;
   deliveryFee: number;
-  minimumOrder: number;
+  minimumOrder: number | null;
+  menuSlug: string;
   estimatedTime: string;
   openingHours: string;
   isOpen: boolean;
@@ -185,7 +186,7 @@ export interface Employee {
   id: string;
   storeId: string;
   name: string;
-  username: string;
+  email: string;
   password: string;
   phone: string;
   roleId: string;

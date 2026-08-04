@@ -1,1 +1,77 @@
-import {useState} from 'react';import {useNavigate} from 'react-router-dom';import {Input} from '../../components/common/Input';import {Button} from '../../components/common/Button';import {formatPhone,onlyDigits} from '../../utils/format';import {authService} from '../../services/authService';import {useAuth} from '../../contexts/AuthContext';export function IdentificationPage(){const[name,setName]=useState('');const[phone,setPhone]=useState('');const nav=useNavigate();const{setCustomer}=useAuth();function submit(e:React.FormEvent){e.preventDefault();if(name.trim().length<3||onlyDigits(phone).length<10)return alert('Preencha nome e telefone corretamente.');setCustomer(authService.saveCustomer(name,phone));nav('/checkout/pagamento')}return <form onSubmit={submit} className="mx-auto max-w-md px-4 py-16"><h1 className="text-3xl font-black">Seus dados</h1><p className="mt-2 text-slate-500">Informe nome e telefone para contato. Não há verificação por código.</p><div className="mt-8 space-y-4"><Input placeholder="Nome completo" value={name} onChange={e=>setName(e.target.value)}/><Input placeholder="(67) 99999-9999" value={phone} onChange={e=>setPhone(formatPhone(e.target.value))}/><Button className="w-full">Continuar</Button></div></form>};
+import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Input } from '../../components/common/Input';
+import { Button } from '../../components/common/Button';
+import { onlyDigits } from '../../utils/format';
+import { authService } from '../../services/authService';
+import { useAuth } from '../../contexts/AuthContext';
+import { STORAGE_KEYS } from '../../constants/storage';
+import { storageService } from '../../services/storageService';
+
+type IdentificationLocationState = {
+  from?: string;
+};
+
+export function IdentificationPage() {
+  const { customer, setCustomer } = useAuth();
+  const [name, setName] = useState(customer?.name ?? '');
+  const [phone, setPhone] = useState(
+    customer?.phone ? onlyDigits(customer.phone).slice(0, 11) : '',
+  );
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+
+    if (name.trim().length < 3 || onlyDigits(phone).length < 10) {
+      alert('Preencha nome e telefone corretamente.');
+      return;
+    }
+
+    const currentPhone = onlyDigits(customer?.phone ?? '');
+    const nextPhone = onlyDigits(phone);
+
+    if (currentPhone && currentPhone !== nextPhone) {
+      storageService.remove(STORAGE_KEYS.CHECKOUT_ADDRESS);
+    }
+
+    setCustomer(authService.saveCustomer(name.trim(), phone));
+
+    const state = location.state as IdentificationLocationState | null;
+    navigate(state?.from ?? '/carrinho', { replace: true });
+  }
+
+  return (
+    <form onSubmit={submit} className="mx-auto max-w-md px-4 py-16">
+      <p className="text-sm font-bold uppercase tracking-wide text-slate-400">
+        Etapa 1 de 3
+      </p>
+      <h1 className="mt-2 text-3xl font-black">Cadastro do cliente</h1>
+      <p className="mt-2 text-slate-500">
+        Informe seus dados antes de visualizar o checkout. Assim conseguimos
+        recuperar o último endereço usado por este telefone.
+      </p>
+
+      <div className="mt-8 space-y-4">
+        <Input
+          placeholder="Nome completo"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <Input
+          type="tel"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={11}
+          placeholder="67999999999"
+          value={phone}
+          onChange={(event) =>
+            setPhone(onlyDigits(event.target.value).slice(0, 11))
+          }
+        />
+        <Button className="w-full">Continuar para o carrinho</Button>
+      </div>
+    </form>
+  );
+}

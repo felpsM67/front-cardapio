@@ -1,15 +1,38 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, MapPin, Navigation, PackageOpen, Phone, UserRound } from 'lucide-react';
 import { orderService } from '../../services/orderService';
 import { courierService } from '../../services/courierService';
 import { formatCurrency } from '../../utils/format';
 import { orderStatusClass, orderStatusLabel } from '../../utils/orderStatus';
+import { storageService } from '../../services/storageService';
+import { STORAGE_KEYS } from '../../constants/storage';
+import { resolveAdminRole } from '../../constants/adminAccess';
+
+interface AdminSession {
+  roleId?: string;
+}
 
 export function DeliveryPage() {
   const [, refresh] = useState(0);
+  const session = storageService.get<AdminSession | null>(STORAGE_KEYS.ADMIN_SESSION, null);
+
+  useEffect(() => {
+    return orderService.subscribe(() => refresh((value) => value + 1));
+  }, []);
+
+  const currentRole = resolveAdminRole(session?.roleId);
   const couriers = courierService.getAll().filter((item) => item.active);
-  const [courierId, setCourierId] = useState(couriers[0]?.id ?? '');
-  const courier = couriers.find((item) => item.id === courierId) ?? couriers[0];
+  const fallbackId = currentRole === 'manager' ? 'manager-fallback' : 'courier-fallback';
+  const [courierId, setCourierId] = useState(couriers[0]?.id ?? fallbackId);
+  const courier = couriers.find((item) => item.id === courierId) ?? couriers[0] ?? {
+    id: fallbackId,
+    name: currentRole === 'manager' ? 'Gerente' : 'Entregador',
+    phone: '',
+    vehicleModel: '',
+    active: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
   const orders = orderService
     .getAll()
     .filter((order) => ['ready', 'out_for_delivery'].includes(order.status));
@@ -17,13 +40,11 @@ export function DeliveryPage() {
   function take(id: string) {
     if (!courier) return;
     orderService.assignCourier(id, courier.id, courier.name);
-    refresh((value) => value + 1);
   }
 
   function delivered(id: string) {
     if (confirm('Confirmar que o pedido foi entregue?')) {
       orderService.markDelivered(id);
-      refresh((value) => value + 1);
     }
   }
 
@@ -37,18 +58,19 @@ export function DeliveryPage() {
             <p className="text-slate-500">Escolha uma entrega e confirme a conclusão.</p>
           </div>
         </div>
-        {couriers.length > 0 && (
+        {(couriers.length > 0 || session?.roleId) && (
           <label className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm">
             <UserRound size={18} />
             <span className="text-sm font-bold">Entregador:</span>
             <select value={courier?.id} onChange={(event) => setCourierId(event.target.value)} className="rounded-lg border px-3 py-2">
               {couriers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {!couriers.length && <option value={fallbackId}>{currentRole === 'manager' ? 'Gerente' : 'Entregador'}</option>}
             </select>
           </label>
         )}
       </div>
 
-      {!courier ? (
+      {!courier || (!couriers.length && !session?.roleId) ? (
         <div className="mt-6 rounded-2xl bg-white p-12 text-center shadow-sm">
           <h2 className="text-xl font-black">Nenhum entregador ativo</h2>
           <p className="mt-2 text-slate-500">Cadastre ou ative um entregador na aba “Entregadores”.</p>

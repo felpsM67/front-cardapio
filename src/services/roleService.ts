@@ -1,5 +1,9 @@
-import { apiClient } from "../api/apiClient";
-import type { Permission, Role } from "../models";
+import { apiClient } from '../api/apiClient';
+import {
+  PREDEFINED_ROLES,
+  normalizeRoleName,
+} from '../constants/predefinedRoles';
+import type { Permission, Role } from '../models';
 
 interface ApiCargo {
   id: number;
@@ -21,69 +25,117 @@ function mapCargo(cargo: ApiCargo): Role {
   return {
     id: String(cargo.id),
     name: cargo.nome,
-    description: cargo.descricao ?? "",
+    description: cargo.descricao ?? '',
     permissions: cargo.permissoes ?? [],
   };
 }
 
-export const roleService = {
-  async getAll(): Promise<Role[]> {
-    const cargos = await apiClient.get<ApiCargo[]>(
-      "/cargos",
-      true,
-    );
+function normalizePermissions(permissions: Permission[]): Permission[] {
+  return [...new Set(permissions)].sort();
+}
 
-    return cargos.map(mapCargo);
-  },
+function hasSamePermissions(
+  currentPermissions: Permission[],
+  expectedPermissions: Permission[],
+): boolean {
+  const current = normalizePermissions(currentPermissions);
+  const expected = normalizePermissions(expectedPermissions);
+
+  return (
+    current.length === expected.length &&
+    current.every((permission, index) => permission === expected[index])
+  );
+}
+
+async function getAllRoles(): Promise<Role[]> {
+  const cargos = await apiClient.get<ApiCargo[]>('/cargos', true);
+  return cargos.map(mapCargo);
+}
+
+async function createRole(data: CreateRoleDTO): Promise<Role> {
+  const cargo = await apiClient.post<ApiCargo>(
+    '/cargos',
+    {
+      nome: data.name.trim(),
+      descricao: data.description.trim() || null,
+      permissoes: data.permissions,
+      ativo: true,
+    },
+    true,
+  );
+
+  return mapCargo(cargo);
+}
+
+async function updateRole(
+  id: string,
+  data: Partial<CreateRoleDTO>,
+): Promise<Role> {
+  const cargo = await apiClient.put<ApiCargo>(
+    `/cargos/${id}`,
+    {
+      nome: data.name?.trim(),
+      descricao:
+        data.description !== undefined
+          ? data.description.trim() || null
+          : undefined,
+      permissoes: data.permissions,
+    },
+    true,
+  );
+
+  return mapCargo(cargo);
+}
+
+export const roleService = {
+  getAll: getAllRoles,
 
   async getById(id: string): Promise<Role> {
-    const cargo = await apiClient.get<ApiCargo>(
-      `/cargos/${id}`,
-      true,
-    );
-
+    const cargo = await apiClient.get<ApiCargo>(`/cargos/${id}`, true);
     return mapCargo(cargo);
   },
 
-  async create(data: CreateRoleDTO): Promise<Role> {
-    const cargo = await apiClient.post<ApiCargo>(
-      "/cargos",
-      {
-        nome: data.name.trim(),
-        descricao: data.description.trim() || null,
-        permissoes: data.permissions,
-        ativo: true,
-      },
-      true,
-    );
+  create: createRole,
 
-    return mapCargo(cargo);
-  },
+  update: updateRole,
 
-  async update(
-    id: string,
-    data: Partial<CreateRoleDTO>,
-  ): Promise<Role> {
-    const cargo = await apiClient.put<ApiCargo>(
-      `/cargos/${id}`,
-      {
-        nome: data.name?.trim(),
-        descricao:
-          data.description !== undefined
-            ? data.description.trim() || null
-            : undefined,
-        permissoes: data.permissions,
-      },
-      true,
-    );
+  async ensurePredefined(): Promise<Role[]> {
+    const existingRoles = await getAllRoles();
+    const synchronizedRoles: Role[] = [];
 
-    return mapCargo(cargo);
+    for (const predefinedRole of PREDEFINED_ROLES) {
+      const existingRole = existingRoles.find(
+        (role) =>
+          normalizeRoleName(role.name) ===
+          normalizeRoleName(predefinedRole.name),
+      );
+
+      if (!existingRole) {
+        synchronizedRoles.push(await createRole(predefinedRole));
+        continue;
+      }
+
+      const needsUpdate =
+        existingRole.description.trim() !== predefinedRole.description ||
+        !hasSamePermissions(
+          existingRole.permissions,
+          predefinedRole.permissions,
+        );
+
+      if (needsUpdate) {
+        synchronizedRoles.push(
+          await updateRole(existingRole.id, predefinedRole),
+        );
+        continue;
+      }
+
+      synchronizedRoles.push(existingRole);
+    }
+
+    return synchronizedRoles;
   },
 
   async remove(id: string): Promise<void> {
-    await apiClient.delete(
-      `/cargos/${id}`,
-      true,
-    );
+    await apiClient.delete(`/cargos/${id}`, true);
   },
 };

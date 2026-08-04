@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Bike, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { Bike, Pencil, Search, Trash2, X } from 'lucide-react';
 import type { Courier } from '../../models';
 import { courierService } from '../../services/courierService';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { onlyDigits } from '../../utils/format';
 
 const emptyForm = {
   name: '',
@@ -22,7 +23,7 @@ export function CouriersPage() {
   const couriers = courierService.getAll();
 
   const filtered = useMemo(() => {
-    const value = search.trim().toLowerCase();
+    const value = String(search ?? '').trim().toLowerCase();
     if (!value) return couriers;
 
     return couriers.filter((courier) =>
@@ -60,7 +61,7 @@ export function CouriersPage() {
     const data = {
       ...form,
       name: form.name.trim(),
-      phone: form.phone.trim(),
+      phone: onlyDigits(form.phone),
       vehicleModel: form.vehicleModel.trim(),
       plate: form.plate.trim().toUpperCase(),
     };
@@ -85,9 +86,6 @@ export function CouriersPage() {
           </p>
         </div>
 
-        <Button onClick={openNew} className="flex items-center gap-2">
-          <Plus size={18} /> Novo entregador
-        </Button>
       </div>
 
       <div className="mt-6 flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
@@ -219,9 +217,17 @@ export function CouriersPage() {
                 Telefone
                 <Input
                   required
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={11}
+                  placeholder="67999999999"
                   value={form.phone}
                   onChange={(event) =>
-                    setForm({ ...form, phone: event.target.value })
+                    setForm({
+                      ...form,
+                      phone: onlyDigits(event.target.value).slice(0, 11),
+                    })
                   }
                 />
               </label>
