@@ -13,21 +13,29 @@ export function AdminLoginPage() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setError('');
-    setLoading(true);
+ async function submit(
+  event: React.FormEvent<HTMLFormElement>,
+): Promise<void> {
+  event.preventDefault();
+  setError('');
+  setLoading(true);
 
-    const authenticated = await authService.adminLogin(email, password);
-    setLoading(false);
+  const authenticated = await authService.adminLogin(
+    email,
+    password,
+  );
 
-    if (authenticated) {
-      navigate(authService.getAdminStartPath());
-      return;
-    }
+  setLoading(false);
 
-    setError('E-mail ou senha inválidos, ou o backend está indisponível.');
+  if (authenticated) {
+    navigate(authService.getAdminStartPath());
+    return;
   }
+
+  setError(
+    'E-mail ou senha inválidos, ou o backend está indisponível.',
+  );
+}
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
@@ -86,9 +94,10 @@ export function AdminLoginPage() {
           )}
 
           <Button
-            disabled={loading}
-            className="flex w-full items-center justify-center gap-2"
-          >
+  type="submit"
+  disabled={loading}
+  className="flex w-full items-center justify-center gap-2"
+>
             <LogIn size={18} /> {loading ? 'Entrando...' : 'Entrar'}
           </Button>
         </div>
