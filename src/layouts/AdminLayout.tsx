@@ -1,5 +1,13 @@
-import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+} from 'react';
+import {
+  NavLink,
+  Outlet,
+  useNavigate,
+} from 'react-router-dom';
 import {
   BadgePercent,
   Bike,
@@ -16,6 +24,7 @@ import {
   ContactRound,
   X,
 } from 'lucide-react';
+
 import type { AdminRole } from '../constants/adminAccess';
 import { resolveAdminRole } from '../constants/adminAccess';
 import { STORAGE_KEYS } from '../constants/storage';
@@ -83,12 +92,6 @@ const links: Array<{
     roles: ['manager'],
   },
   {
-    to: '/admin/entregadores',
-    label: 'Entregadores',
-    icon: ContactRound,
-    roles: ['manager'],
-  },
-  {
     to: '/admin/cargos',
     label: 'Cargos',
     icon: UsersRound,
@@ -104,17 +107,51 @@ const links: Array<{
 
 export function AdminLayout() {
   const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const config = configService.get();
-  const currentStore = storeService.getCurrent();
-  const session = storageService.get<AdminSession | null>(
-    STORAGE_KEYS.ADMIN_SESSION,
-    null,
-  );
-  const currentRole = resolveAdminRole(session?.roleId);
-  const visibleLinks = links.filter((link) => link.roles.includes(currentRole));
 
-  function logout() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [primaryColor, setPrimaryColor] =
+    useState('#ea580c');
+
+  const currentStore = storeService.getCurrent();
+
+  const session =
+    storageService.get<AdminSession | null>(
+      STORAGE_KEYS.ADMIN_SESSION,
+      null,
+    );
+
+  const currentRole = resolveAdminRole(
+    session?.roleId,
+  );
+
+  const visibleLinks = links.filter((link) =>
+    link.roles.includes(currentRole),
+  );
+
+  useEffect(() => {
+    async function loadConfig(): Promise<void> {
+      try {
+        const config =
+          await configService.get();
+
+        setPrimaryColor(config.primaryColor);
+
+        document.documentElement.style.setProperty(
+          '--primary',
+          config.primaryColor,
+        );
+      } catch (error) {
+        console.error(
+          'Erro ao carregar configurações da loja:',
+          error,
+        );
+      }
+    }
+
+    void loadConfig();
+  }, []);
+
+  function logout(): void {
     authService.adminLogout();
     navigate('/admin/login');
   }
@@ -123,10 +160,17 @@ export function AdminLayout() {
     <aside className="flex h-full w-[82vw] max-w-72 flex-col bg-slate-900 p-5 text-white shadow-2xl lg:min-h-screen lg:w-64 lg:max-w-none lg:shadow-none">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-black">Painel ADM</h1>
-          <p className="mt-1 text-xs text-slate-400">{currentStore.name}</p>
+          <h1 className="text-xl font-black">
+            Painel ADM
+          </h1>
+
+          <p className="mt-1 text-xs text-slate-400">
+            {currentStore.name}
+          </p>
         </div>
+
         <button
+          type="button"
           onClick={() => setMenuOpen(false)}
           aria-label="Fechar menu"
           className="rounded-lg p-2 hover:bg-slate-800 lg:hidden"
@@ -136,30 +180,38 @@ export function AdminLayout() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto">
-        {visibleLinks.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            end={to === '/admin'}
-            to={to}
-            onClick={() => setMenuOpen(false)}
-            style={({ isActive }) =>
-              isActive ? { backgroundColor: 'var(--primary)' } : {}
-            }
-            className={({ isActive }) =>
-              `flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition ${
+        {visibleLinks.map(
+          ({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              end={to === '/admin'}
+              to={to}
+              onClick={() => setMenuOpen(false)}
+              style={({ isActive }) =>
                 isActive
-                  ? 'text-white'
-                  : 'text-slate-200 hover:bg-slate-800'
-              }`
-            }
-          >
-            <Icon size={19} />
-            <span>{label}</span>
-          </NavLink>
-        ))}
+                  ? {
+                      backgroundColor:
+                        'var(--primary)',
+                    }
+                  : {}
+              }
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition ${
+                  isActive
+                    ? 'text-white'
+                    : 'text-slate-200 hover:bg-slate-800'
+                }`
+              }
+            >
+              <Icon size={19} />
+              <span>{label}</span>
+            </NavLink>
+          ),
+        )}
       </nav>
 
       <button
+        type="button"
         onClick={logout}
         className="mt-5 flex items-center gap-2 rounded-xl px-3 py-3 text-sm text-slate-300 hover:bg-slate-800"
       >
@@ -171,33 +223,50 @@ export function AdminLayout() {
 
   return (
     <div
-      style={{ '--primary': config.primaryColor } as React.CSSProperties}
+      style={
+        {
+          '--primary': primaryColor,
+        } as CSSProperties
+      }
       className="min-h-screen bg-slate-100 lg:flex"
     >
       <header className="sticky top-0 z-30 flex items-center gap-3 border-b bg-white px-4 py-3 shadow-sm lg:hidden">
         <button
+          type="button"
           onClick={() => setMenuOpen(true)}
           aria-label="Abrir menu administrativo"
           className="rounded-xl border p-2 text-slate-700 active:scale-95"
         >
           <Menu />
         </button>
+
         <div>
-          <p className="text-xs font-medium text-slate-500">Administração</p>
-          <h1 className="font-black text-slate-900">{currentStore.name}</h1>
+          <p className="text-xs font-medium text-slate-500">
+            Administração
+          </p>
+
+          <h1 className="font-black text-slate-900">
+            {currentStore.name}
+          </h1>
         </div>
       </header>
 
-      <div className="hidden lg:block">{sidebar}</div>
+      <div className="hidden lg:block">
+        {sidebar}
+      </div>
 
       {menuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
+            type="button"
             aria-label="Fechar menu"
             onClick={() => setMenuOpen(false)}
             className="absolute inset-0 bg-black/55"
           />
-          <div className="admin-drawer-enter relative h-full">{sidebar}</div>
+
+          <div className="admin-drawer-enter relative h-full">
+            {sidebar}
+          </div>
         </div>
       )}
 

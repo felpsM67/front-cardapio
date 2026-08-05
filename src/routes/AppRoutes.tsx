@@ -45,7 +45,7 @@ export function AppRoutes() {
               <Route path="/admin/produtos" element={<ProductsPage />} />
               <Route
                 path="/admin/adicionais"
-                element={<Navigate to="/admin/produtos/:id" replace />}
+                element={<Navigate to="/admin/produtos" replace />}
               />
               <Route path="/admin/categorias" element={<CategoriesPage />} />
               <Route path="/admin/promocoes" element={<PromotionsPage />} />

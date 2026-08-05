@@ -1,5 +1,15 @@
-import { useMemo, useState } from 'react';
-import { Check, Copy, ExternalLink, Link2, Settings2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  ImagePlus,
+  Link2,
+  Settings2,
+  Trash2,
+  Upload,
+} from 'lucide-react';
+
 import type { StoreConfig } from '../../models';
 import { configService } from '../../services/configService';
 import { onlyDigits } from '../../utils/format';
@@ -8,6 +18,22 @@ import { Input } from '../../components/common/Input';
 import { Toggle } from '../../components/common/Toggle';
 
 type SettingsTab = 'store' | 'share';
+
+const emptyStoreConfig: StoreConfig = {
+  storeName: '',
+  description: '',
+  whatsappNumber: '',
+  pixKey: '',
+  pixHolderName: '',
+  deliveryFee: 0,
+  minimumOrder: null,
+  menuSlug: '',
+  estimatedTime: '',
+  openingHours: '',
+  isOpen: false,
+  primaryColor: '#ea580c',
+  coverUrl: '',
+};
 
 function slugify(value: string): string {
   return value
@@ -20,91 +46,246 @@ function slugify(value: string): string {
 }
 
 export function SettingsPage() {
-  const [data, setData] = useState<StoreConfig>(configService.get());
-  const [activeTab, setActiveTab] = useState<SettingsTab>('store');
+  const [data, setData] =
+    useState<StoreConfig>(emptyStoreConfig);
+
+  const [activeTab, setActiveTab] =
+    useState<SettingsTab>('store');
+
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [togglingStore, setTogglingStore] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadSettings(): Promise<void> {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const config = await configService.get();
+        setData(config);
+      } catch (loadError) {
+        console.error(
+          'Erro ao carregar configurações:',
+          loadError,
+        );
+
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : 'Não foi possível carregar as configurações.',
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadSettings();
+  }, []);
 
   const shareUrl = useMemo(() => {
     if (typeof window === 'undefined') return '';
 
     const url = new URL('/', window.location.origin);
-    if (data.menuSlug) url.searchParams.set('loja', data.menuSlug);
+
+    if (data.menuSlug) {
+      url.searchParams.set('loja', data.menuSlug);
+    }
+
     return url.toString();
   }, [data.menuSlug]);
 
-  const set = (
-    key: keyof StoreConfig,
-    value: string | number | boolean | null,
-  ) => {
-    setData((current) => ({ ...current, [key]: value }));
-  };
+  function set<K extends keyof StoreConfig>(
+    key: K,
+    value: StoreConfig[K],
+  ): void {
+    setData((current) => ({
+      ...current,
+      [key]: value,
+    }));
 
-  function saveSettings() {
-    configService.save(data);
-    document.documentElement.style.setProperty(
-      '--primary',
-      data.primaryColor,
-    );
+    setMessage(null);
+    setError(null);
   }
 
-  function toggleStore() {
-    const next = { ...data, isOpen: !data.isOpen };
+  function changePrimaryColor(value: string): void {
+    set('primaryColor', value);
+    configService.applyPrimaryColor(value);
+  }
+
+  async function saveSettings(): Promise<void> {
+    if (!data.storeName.trim()) {
+      setError('Informe o nome da loja.');
+      return;
+    }
+
+    if (!data.menuSlug.trim()) {
+      setError('Informe o identificador do cardápio.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      setMessage(null);
+
+      const saved = await configService.save(data);
+
+      setData(saved);
+      setMessage('Configurações salvas com sucesso.');
+    } catch (saveError) {
+      console.error(
+        'Erro ao salvar configurações:',
+        saveError,
+      );
+
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : 'Não foi possível salvar as configurações.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleStore(): Promise<void> {
+    const previous = data;
+    const next: StoreConfig = {
+      ...data,
+      isOpen: !data.isOpen,
+    };
+
     setData(next);
-    configService.save(next);
+
+    try {
+      setTogglingStore(true);
+      setError(null);
+      setMessage(null);
+
+      const saved = await configService.save(next);
+
+      setData(saved);
+      setMessage(
+        saved.isOpen
+          ? 'A loja está recebendo pedidos.'
+          : 'Os pedidos foram pausados.',
+      );
+    } catch (toggleError) {
+      setData(previous);
+
+      console.error(
+        'Erro ao alterar situação da loja:',
+        toggleError,
+      );
+
+      setError(
+        toggleError instanceof Error
+          ? toggleError.message
+          : 'Não foi possível alterar a situação da loja.',
+      );
+    } finally {
+      setTogglingStore(false);
+    }
   }
 
-  function generateSlug() {
+  function generateSlug(): void {
     set('menuSlug', slugify(data.storeName));
     setCopied(false);
   }
 
-  async function copyShareUrl() {
+  async function copyShareUrl(): Promise<void> {
     if (!shareUrl) return;
 
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+
+      window.setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch {
-      alert('Não foi possível copiar o link automaticamente.');
+      setError(
+        'Não foi possível copiar o link automaticamente.',
+      );
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-72 items-center justify-center">
+        <div className="h-14 w-14 animate-spin rounded-full border-4 border-slate-200 border-t-orange-500" />
+      </div>
+    );
   }
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        saveSettings();
+        void saveSettings();
       }}
     >
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black">Configurações</h1>
+          <h1 className="text-3xl font-black">
+            Configurações
+          </h1>
+
           <p className="mt-1 text-slate-500">
-            Personalize a loja e defina como o cardápio será compartilhado.
+            Personalize a loja e defina como o cardápio será
+            compartilhado.
           </p>
         </div>
 
         <button
           type="button"
-          onClick={toggleStore}
-          className={`flex min-w-48 items-center justify-between gap-4 rounded-2xl px-5 py-4 font-black text-white shadow-sm transition hover:-translate-y-0.5 ${
-            data.isOpen ? 'bg-emerald-600' : 'bg-slate-800'
+          disabled={togglingStore || saving}
+          onClick={() => void toggleStore()}
+          className={`flex min-w-48 items-center justify-between gap-4 rounded-2xl px-5 py-4 font-black text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${
+            data.isOpen
+              ? 'bg-emerald-600'
+              : 'bg-slate-800'
           }`}
         >
           <span>
             <span
               className={`mr-2 inline-block h-3 w-3 rounded-full ${
-                data.isOpen ? 'animate-pulse bg-white' : 'bg-red-400'
+                data.isOpen
+                  ? 'animate-pulse bg-white'
+                  : 'bg-red-400'
               }`}
             />
-            {data.isOpen ? 'Loja aberta' : 'Loja fechada'}
+
+            {data.isOpen
+              ? 'Loja aberta'
+              : 'Loja fechada'}
           </span>
+
           <span className="text-xs opacity-80">
-            Clique para {data.isOpen ? 'fechar' : 'abrir'}
+            {togglingStore
+              ? 'Salvando...'
+              : `Clique para ${
+                  data.isOpen ? 'fechar' : 'abrir'
+                }`}
           </span>
         </button>
       </div>
+
+      {error && (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {message && (
+        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {message}
+        </div>
+      )}
 
       <div className="mt-6 flex gap-2 rounded-2xl bg-white p-2 shadow-sm">
         <button
@@ -117,13 +298,16 @@ export function SettingsPage() {
           }`}
           style={
             activeTab === 'store'
-              ? { backgroundColor: 'var(--primary)' }
+              ? {
+                  backgroundColor: 'var(--primary)',
+                }
               : undefined
           }
         >
           <Settings2 size={18} />
           Loja
         </button>
+
         <button
           type="button"
           onClick={() => setActiveTab('share')}
@@ -134,7 +318,9 @@ export function SettingsPage() {
           }`}
           style={
             activeTab === 'share'
-              ? { backgroundColor: 'var(--primary)' }
+              ? {
+                  backgroundColor: 'var(--primary)',
+                }
               : undefined
           }
         >
@@ -146,33 +332,88 @@ export function SettingsPage() {
       {activeTab === 'store' && (
         <div className="mt-4 grid gap-4 rounded-2xl bg-white p-6 sm:grid-cols-2">
           <Input
-            placeholder="Nome"
+            placeholder="Nome da loja"
             value={data.storeName}
-            onChange={(event) => set('storeName', event.target.value)}
+            onChange={(event) =>
+              set('storeName', event.target.value)
+            }
           />
 
           <label className="rounded-xl border p-3">
-            <span className="block text-sm font-semibold">Cor principal</span>
+            <span className="block text-sm font-semibold">
+              Cor principal
+            </span>
+
             <div className="mt-2 flex items-center gap-3">
               <input
                 type="color"
                 value={data.primaryColor}
-                onChange={(event) => set('primaryColor', event.target.value)}
+                onChange={(event) =>
+                  changePrimaryColor(event.target.value)
+                }
                 className="h-10 w-16"
               />
+
               <Input
                 value={data.primaryColor}
-                onChange={(event) => set('primaryColor', event.target.value)}
+                onChange={(event) =>
+                  changePrimaryColor(event.target.value)
+                }
               />
             </div>
           </label>
+
+          <textarea
+            placeholder="Descrição da loja"
+            value={data.description}
+            onChange={(event) =>
+              set('description', event.target.value)
+            }
+            className="min-h-28 rounded-xl border p-3 sm:col-span-2"
+          />
+
+          <label className="sm:col-span-2 cursor-pointer">
+  <input
+    type="file"
+    accept="image/*"
+    className="hidden"
+    onChange={(event) => {
+      const file = event.target.files?.[0];
+
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        set('coverUrl', String(reader.result));
+      };
+
+      reader.readAsDataURL(file);
+    }}
+  />
+
+  <span
+    className="inline-flex rounded-xl px-4 py-3 font-bold text-white"
+    style={{ backgroundColor: 'var(--primary)' }}
+  >
+    Selecionar imagem de capa
+  </span>
+</label>
+
+          {data.coverUrl && (
+            <img
+              src={data.coverUrl}
+              alt="Pré-visualização da capa"
+              className="aspect-[16/5] w-full rounded-xl object-cover sm:col-span-2"
+            />
+          )}
 
           <Input
             type="tel"
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={15}
-            placeholder="5567999999999"
+            placeholder="WhatsApp da loja"
             value={data.whatsappNumber}
             onChange={(event) =>
               set(
@@ -181,56 +422,73 @@ export function SettingsPage() {
               )
             }
           />
+
           <Input
             placeholder="Chave Pix"
             value={data.pixKey}
-            onChange={(event) => set('pixKey', event.target.value)}
+            onChange={(event) =>
+              set('pixKey', event.target.value)
+            }
           />
+
           <Input
             placeholder="Beneficiário Pix"
             value={data.pixHolderName}
-            onChange={(event) => set('pixHolderName', event.target.value)}
+            onChange={(event) =>
+              set('pixHolderName', event.target.value)
+            }
           />
+
           <Input
             type="number"
+            min="0"
+            step="0.01"
             placeholder="Taxa de entrega"
             value={data.deliveryFee}
             onChange={(event) =>
-              set('deliveryFee', Number(event.target.value))
+              set(
+                'deliveryFee',
+                Number(event.target.value),
+              )
             }
           />
 
           <label>
             <span className="mb-1 block text-sm font-semibold text-slate-700">
-              Pedido mínimo (opcional)
+              Pedido mínimo
             </span>
+
             <Input
               type="number"
               min="0"
-              placeholder="Deixe em branco para não exigir mínimo"
+              step="0.01"
+              placeholder="Opcional"
               value={data.minimumOrder ?? ''}
               onChange={(event) =>
                 set(
                   'minimumOrder',
-                  event.target.value === '' ? null : Number(event.target.value),
+                  event.target.value === ''
+                    ? null
+                    : Number(event.target.value),
                 )
               }
             />
-            <span className="mt-1 block text-xs text-slate-500">
-              Sem valor informado, o cliente poderá finalizar pedidos de qualquer
-              valor.
-            </span>
           </label>
 
           <Input
-            placeholder="Tempo estimado"
+            placeholder="Tempo estimado, ex.: 35–50 min"
             value={data.estimatedTime}
-            onChange={(event) => set('estimatedTime', event.target.value)}
+            onChange={(event) =>
+              set('estimatedTime', event.target.value)
+            }
           />
+
           <Input
-            placeholder="Horário"
+            placeholder="Horário, ex.: 18:00 às 23:30"
             value={data.openingHours}
-            onChange={(event) => set('openingHours', event.target.value)}
+            onChange={(event) =>
+              set('openingHours', event.target.value)
+            }
           />
 
           <div className="flex items-center">
@@ -238,41 +496,59 @@ export function SettingsPage() {
               checked={data.isOpen}
               labelOn="Recebendo pedidos"
               labelOff="Pedidos pausados"
-              onChange={toggleStore}
+              onChange={() => void toggleStore()}
             />
           </div>
 
-          <Button className="sm:col-span-2">Salvar configurações</Button>
+          <Button
+            className="sm:col-span-2"
+            disabled={saving || togglingStore}
+          >
+            {saving
+              ? 'Salvando...'
+              : 'Salvar configurações'}
+          </Button>
         </div>
       )}
 
       {activeTab === 'share' && (
         <div className="mt-4 rounded-2xl bg-white p-6">
           <div className="max-w-2xl">
-            <h2 className="text-xl font-black">Link de compartilhamento</h2>
+            <h2 className="text-xl font-black">
+              Link de compartilhamento
+            </h2>
+
             <p className="mt-1 text-sm text-slate-500">
-              Escolha um identificador simples para gerar o endereço público do
-              seu cardápio.
+              Escolha um identificador simples para gerar o
+              endereço público do seu cardápio.
             </p>
 
             <label className="mt-6 block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">
                 Identificador do cardápio
               </span>
+
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
                   placeholder="ex.: sabor-express"
                   value={data.menuSlug}
                   onChange={(event) => {
-                    set('menuSlug', slugify(event.target.value));
+                    set(
+                      'menuSlug',
+                      slugify(event.target.value),
+                    );
+
                     setCopied(false);
                   }}
                 />
+
                 <Button
                   type="button"
                   onClick={generateSlug}
                   className="whitespace-nowrap bg-slate-700"
-                  style={{ backgroundColor: '#334155' }}
+                  style={{
+                    backgroundColor: '#334155',
+                  }}
                 >
                   Gerar pelo nome
                 </Button>
@@ -283,6 +559,7 @@ export function SettingsPage() {
               <span className="text-xs font-bold uppercase tracking-wide text-slate-400">
                 Link gerado
               </span>
+
               <p className="mt-2 break-all font-semibold text-slate-800">
                 {shareUrl}
               </p>
@@ -293,15 +570,23 @@ export function SettingsPage() {
                   onClick={() => void copyShareUrl()}
                   disabled={!data.menuSlug}
                 >
-                  {copied ? <Check size={17} /> : <Copy size={17} />}
-                  {copied ? 'Link copiado' : 'Copiar link'}
+                  {copied
+                    ? <Check size={17} />
+                    : <Copy size={17} />}
+
+                  {copied
+                    ? 'Link copiado'
+                    : 'Copiar link'}
                 </Button>
+
                 <a
                   href={shareUrl}
                   target="_blank"
                   rel="noreferrer"
                   className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold transition hover:bg-white ${
-                    data.menuSlug ? '' : 'pointer-events-none opacity-50'
+                    data.menuSlug
+                      ? ''
+                      : 'pointer-events-none opacity-50'
                   }`}
                 >
                   <ExternalLink size={17} />
@@ -310,8 +595,13 @@ export function SettingsPage() {
               </div>
             </div>
 
-            <Button className="mt-6" disabled={!data.menuSlug}>
-              Salvar link do cardápio
+            <Button
+              className="mt-6"
+              disabled={!data.menuSlug || saving}
+            >
+              {saving
+                ? 'Salvando...'
+                : 'Salvar link do cardápio'}
             </Button>
           </div>
         </div>

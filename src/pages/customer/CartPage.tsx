@@ -30,11 +30,53 @@ export function CartPage() {
   const cart = useCart();
   const { customer } = useAuth();
   const navigate = useNavigate();
-  const config = configService.get();
-  const minimumOrder =
-    config.minimumOrder !== null && config.minimumOrder > 0
-      ? config.minimumOrder
-      : null;
+  const [minimumOrder, setMinimumOrder] =
+  useState<number | null>(null);
+
+const [deliveryFee, setDeliveryFee] =
+  useState(0);
+
+useEffect(() => {
+  async function loadConfig(): Promise<void> {
+    try {
+      const config = await configService.get();
+
+      setMinimumOrder(
+        config.minimumOrder !== null &&
+          config.minimumOrder > 0
+          ? config.minimumOrder
+          : null,
+      );
+
+      setDeliveryFee(
+        Number(config.deliveryFee) || 0,
+      );
+    } catch (error) {
+      console.error(
+        'Erro ao carregar configurações:',
+        error,
+      );
+    }
+  }
+
+  function handleConfigUpdate(): void {
+    void loadConfig();
+  }
+
+  void loadConfig();
+
+  window.addEventListener(
+    'store-config-updated',
+    handleConfigUpdate,
+  );
+
+  return () => {
+    window.removeEventListener(
+      'store-config-updated',
+      handleConfigUpdate,
+    );
+  };
+}, []);
   const amountMissing = minimumOrder
     ? Math.max(minimumOrder - cart.subtotal, 0)
     : 0;
@@ -362,11 +404,11 @@ export function CartPage() {
         </div>
         <div className="mt-2 flex justify-between">
           <span>Entrega</span>
-          <b>{formatCurrency(config.deliveryFee)}</b>
+          <b>{formatCurrency(deliveryFee)}</b>
         </div>
         <div className="mt-4 flex justify-between border-t pt-4 text-xl">
           <b>Total</b>
-          <b>{formatCurrency(cart.subtotal + config.deliveryFee)}</b>
+          <b>{formatCurrency(cart.subtotal + deliveryFee)}</b>
         </div>
       </div>
 

@@ -1,6 +1,18 @@
-import { useState } from 'react';
-import { Link2, Link2Off, Pencil, Plus, Trash2, X } from 'lucide-react';
-import type { Promotion } from '../../models';
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+} from 'react';
+import {
+  Link2,
+  Link2Off,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react';
+
+import type { Product, Promotion } from '../../models';
 import { promotionService } from '../../services/promotionService';
 import { productService } from '../../services/productService';
 import { Input } from '../../components/common/Input';
@@ -23,23 +35,79 @@ const blankPromotion = (): Omit<Promotion, 'id'> => ({
 });
 
 export function PromotionsPage() {
-  const [, refresh] = useState(0);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(blankPromotion());
+  const [promotions, setPromotions] =
+    useState<Promotion[]>([]);
 
-  const promotions = promotionService.getAll();
-  const products = productService.getAll();
+  const [products, setProducts] =
+    useState<Product[]>([]);
 
-  function openPromotion(promotion?: Promotion) {
+  const [modalOpen, setModalOpen] =
+    useState(false);
+
+  const [editingId, setEditingId] =
+    useState<string | null>(null);
+
+  const [form, setForm] =
+    useState(blankPromotion());
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  async function loadData(): Promise<void> {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [loadedPromotions, loadedProducts] =
+        await Promise.all([
+          promotionService.getAll(),
+          Promise.resolve(productService.getAll()),
+        ]);
+
+      setPromotions(loadedPromotions);
+      setProducts(loadedProducts);
+    } catch (loadError) {
+      console.error(
+        'Erro ao carregar promoções:',
+        loadError,
+      );
+
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : 'Não foi possível carregar as promoções.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function openPromotion(
+    promotion?: Promotion,
+  ): void {
+    setError(null);
+
     if (promotion) {
       setEditingId(promotion.id);
+
       setForm({
         title: promotion.title,
         description: promotion.description,
         imageUrl: promotion.imageUrl,
-        productIds: promotion.productIds,
-        promotionalPrices: promotion.promotionalPrices ?? {},
+        productIds: [...promotion.productIds],
+        promotionalPrices: {
+          ...promotion.promotionalPrices,
+        },
         active: promotion.active,
         clickable: promotion.clickable,
         badge: promotion.badge,
@@ -55,82 +123,193 @@ export function PromotionsPage() {
     setModalOpen(true);
   }
 
-  function closeModal() {
+  function closeModal(): void {
+    if (saving) return;
+
     setModalOpen(false);
     setEditingId(null);
     setForm(blankPromotion());
   }
 
-  function savePromotion(event: React.FormEvent) {
+  async function savePromotion(
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<void> {
     event.preventDefault();
 
-    if (!form.title.trim() || !form.description.trim() || !form.imageUrl) {
-      alert('Preencha título, descrição e imagem.');
-      return;
-    }
-
-    if (form.clickable && !form.productIds.length) {
-      alert('Selecione pelo menos um produto para a promoção clicável.');
-      return;
-    }
-
-    const invalidPromotionalPrice = form.productIds.some((productId) => {
-      const product = products.find((item) => item.id === productId);
-      const promotionalPrice = form.promotionalPrices[productId];
-
-      return (
-        !product ||
-        !promotionalPrice ||
-        promotionalPrice <= 0 ||
-        promotionalPrice >= product.price
-      );
-    });
-
-    if (form.clickable && invalidPromotionalPrice) {
-      alert(
-        'Informe para cada produto um valor promocional maior que zero e menor que o valor original.',
+    if (
+      !form.title.trim() ||
+      !form.description.trim() ||
+      !form.imageUrl.trim()
+    ) {
+      setError(
+        'Preencha título, descrição e imagem.',
       );
       return;
     }
 
-    if (editingId) {
-      promotionService.update(editingId, form);
-    } else {
-      promotionService.create(form);
+    if (
+      form.clickable &&
+      !form.productIds.length
+    ) {
+      setError(
+        'Selecione pelo menos um produto.',
+      );
+      return;
     }
 
-    closeModal();
-    refresh((value) => value + 1);
+    const invalidPrice =
+      form.productIds.some((productId) => {
+        const product = products.find(
+          (item) => item.id === productId,
+        );
+
+        const promotionalPrice =
+          form.promotionalPrices[productId];
+
+        return (
+          !product ||
+          !promotionalPrice ||
+          promotionalPrice <= 0 ||
+          promotionalPrice >= product.price
+        );
+      });
+
+    if (form.clickable && invalidPrice) {
+      setError(
+        'O preço promocional precisa ser maior que zero e menor que o preço original.',
+      );
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+
+      if (editingId) {
+        await promotionService.update(
+          editingId,
+          form,
+        );
+      } else {
+        await promotionService.create(form);
+      }
+
+      closeModal();
+      await loadData();
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : 'Não foi possível salvar a promoção.',
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function uploadImage(file?: File) {
+  async function togglePromotion(
+    promotion: Promotion,
+  ): Promise<void> {
+    try {
+      await promotionService.update(
+        promotion.id,
+        {
+          active: !promotion.active,
+        },
+      );
+
+      await loadData();
+    } catch (toggleError) {
+      setError(
+        toggleError instanceof Error
+          ? toggleError.message
+          : 'Não foi possível alterar a promoção.',
+      );
+    }
+  }
+
+  async function removePromotion(
+    promotion: Promotion,
+  ): Promise<void> {
+    if (
+      !confirm(
+        `Excluir a promoção “${promotion.title}”?`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await promotionService.remove(
+        promotion.id,
+      );
+
+      await loadData();
+    } catch (removeError) {
+      setError(
+        removeError instanceof Error
+          ? removeError.message
+          : 'Não foi possível excluir a promoção.',
+      );
+    }
+  }
+
+  function uploadImage(file?: File): void {
     if (!file) return;
 
     const reader = new FileReader();
+
     reader.onload = () => {
       setForm((current) => ({
         ...current,
         imageUrl: String(reader.result),
       }));
     };
+
+    reader.onerror = () => {
+      setError(
+        'Não foi possível carregar a imagem.',
+      );
+    };
+
     reader.readAsDataURL(file);
+  }
+
+  if (loading) {
+    return (
+      <p className="py-16 text-center text-slate-500">
+        Carregando promoções...
+      </p>
+    );
   }
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-black">Promoções</h1>
+          <h1 className="text-3xl font-black">
+            Promoções
+          </h1>
+
           <p className="mt-1 text-slate-500">
-            Crie banners informativos ou promoções clicáveis com produtos.
+            Crie banners e ofertas clicáveis.
           </p>
         </div>
 
-        <Button onClick={() => openPromotion()}>
+        <Button
+          type="button"
+          onClick={() => openPromotion()}
+        >
           <Plus size={18} />
           Nova promoção
         </Button>
       </div>
+
+      {error && (
+        <div className="mt-4 rounded-xl bg-red-50 p-3 text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {promotions.map((promotion) => (
@@ -144,7 +323,8 @@ export function PromotionsPage() {
                 alt={promotion.title}
                 className="aspect-[16/9] w-full object-cover"
               />
-              <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-xs font-black shadow-sm">
+
+              <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-xs font-black">
                 {promotion.clickable ? (
                   <span className="flex items-center gap-1 text-green-700">
                     <Link2 size={13} />
@@ -165,17 +345,17 @@ export function PromotionsPage() {
                   <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">
                     {promotion.badge}
                   </span>
-                  <h2 className="mt-2 font-black">{promotion.title}</h2>
+
+                  <h2 className="mt-2 font-black">
+                    {promotion.title}
+                  </h2>
                 </div>
 
                 <Toggle
                   checked={promotion.active}
-                  onChange={() => {
-                    promotionService.update(promotion.id, {
-                      active: !promotion.active,
-                    });
-                    refresh((value) => value + 1);
-                  }}
+                  onChange={() =>
+                    void togglePromotion(promotion)
+                  }
                 />
               </div>
 
@@ -185,13 +365,16 @@ export function PromotionsPage() {
 
               <p className="mt-3 text-xs text-slate-500">
                 {promotion.clickable
-                  ? `${promotion.productIds.length} produto(s) vinculado(s)`
-                  : 'Banner sem ação ao clicar'}
+                  ? `${promotion.productIds.length} produto(s)`
+                  : 'Banner sem clique'}
               </p>
 
               <div className="mt-4 flex gap-2">
                 <button
-                  onClick={() => openPromotion(promotion)}
+                  type="button"
+                  onClick={() =>
+                    openPromotion(promotion)
+                  }
                   className="flex flex-1 items-center justify-center gap-1 rounded-xl border py-2 font-bold"
                 >
                   <Pencil size={16} />
@@ -199,13 +382,11 @@ export function PromotionsPage() {
                 </button>
 
                 <button
-                  onClick={() => {
-                    if (!confirm('Excluir promoção?')) return;
-                    promotionService.remove(promotion.id);
-                    refresh((value) => value + 1);
-                  }}
+                  type="button"
+                  onClick={() =>
+                    void removePromotion(promotion)
+                  }
                   className="rounded-xl border p-2 text-red-600"
-                  aria-label={`Excluir ${promotion.title}`}
                 >
                   <Trash2 size={18} />
                 </button>
@@ -216,19 +397,18 @@ export function PromotionsPage() {
       </div>
 
       {modalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 sm:items-center sm:p-4"
-          onMouseDown={(event) =>
-            event.target === event.currentTarget && closeModal()
-          }
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
           <form
-            onSubmit={savePromotion}
-            className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white sm:max-w-2xl sm:rounded-3xl"
+            onSubmit={(event) =>
+              void savePromotion(event)
+            }
+            className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white"
           >
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-5">
+            <div className="sticky top-0 flex items-center justify-between border-b bg-white p-5">
               <h2 className="text-xl font-black">
-                {editingId ? 'Editar' : 'Nova'} promoção
+                {editingId
+                  ? 'Editar promoção'
+                  : 'Nova promoção'}
               </h2>
 
               <button
@@ -242,76 +422,122 @@ export function PromotionsPage() {
 
             <div className="grid gap-4 p-5 sm:grid-cols-2">
               <Input
-                placeholder="Título *"
+                placeholder="Título"
                 value={form.title}
                 onChange={(event) =>
-                  setForm({ ...form, title: event.target.value })
+                  setForm({
+                    ...form,
+                    title: event.target.value,
+                  })
                 }
               />
 
               <Input
-                placeholder="Selo (ex.: Oferta)"
+                placeholder="Selo"
                 value={form.badge}
                 onChange={(event) =>
-                  setForm({ ...form, badge: event.target.value })
+                  setForm({
+                    ...form,
+                    badge: event.target.value,
+                  })
                 }
               />
 
               <textarea
                 className="min-h-24 rounded-xl border p-3 sm:col-span-2"
-                placeholder="Descrição *"
+                placeholder="Descrição"
                 value={form.description}
                 onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
+                  setForm({
+                    ...form,
+                    description: event.target.value,
+                  })
                 }
               />
 
-              <label className="sm:col-span-2">
-                <span className="mb-2 block font-bold">
-                  Imagem da promoção *
-                </span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => uploadImage(event.target.files?.[0])}
-                  className="w-full rounded-xl border p-3"
-                />
+              <Input
+                className="sm:col-span-2"
+                placeholder="URL da imagem"
+                value={form.imageUrl}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    imageUrl: event.target.value,
+                  })
+                }
+              />
 
-                {form.imageUrl && (
-                  <img
-                    src={form.imageUrl}
-                    alt="Pré-visualização da promoção"
-                    className="mt-3 aspect-[16/6] w-full rounded-xl object-cover"
-                  />
-                )}
-              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) =>
+                  uploadImage(
+                    event.target.files?.[0],
+                  )
+                }
+                className="rounded-xl border p-3 sm:col-span-2"
+              />
+
+              {form.imageUrl && (
+                <img
+                  src={form.imageUrl}
+                  alt="Prévia"
+                  className="aspect-[16/6] w-full rounded-xl object-cover sm:col-span-2"
+                />
+              )}
 
               <Input
                 type="number"
                 min="1"
-                placeholder="Ordem"
                 value={form.order}
                 onChange={(event) =>
-                  setForm({ ...form, order: Number(event.target.value) })
+                  setForm({
+                    ...form,
+                    order: Number(
+                      event.target.value,
+                    ),
+                  })
                 }
               />
 
-              <label className="flex items-center justify-between rounded-xl border px-4 py-3">
-                <span className="font-semibold">Promoção ativa</span>
+              <label className="flex items-center justify-between rounded-xl border p-3">
+                <span>Ativa</span>
+
                 <Toggle
                   checked={form.active}
-                  onChange={() => setForm({ ...form, active: !form.active })}
+                  onChange={() =>
+                    setForm({
+                      ...form,
+                      active: !form.active,
+                    })
+                  }
                 />
               </label>
 
-              <label className="flex items-center justify-between rounded-xl border px-4 py-3 sm:col-span-2">
-                <div>
-                  <span className="block font-bold">Banner clicável</span>
-                  <small className="text-slate-500">
-                    Ao clicar, o cliente verá os produtos vinculados e poderá
-                    adicionar ao carrinho.
-                  </small>
-                </div>
+              <Input
+                type="datetime-local"
+                value={form.startsAt ?? ''}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    startsAt: event.target.value,
+                  })
+                }
+              />
+
+              <Input
+                type="datetime-local"
+                value={form.endsAt ?? ''}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    endsAt: event.target.value,
+                  })
+                }
+              />
+
+              <label className="flex items-center justify-between rounded-xl border p-3 sm:col-span-2">
+                <span>Banner clicável</span>
 
                 <Toggle
                   checked={form.clickable}
@@ -319,118 +545,114 @@ export function PromotionsPage() {
                     setForm({
                       ...form,
                       clickable: !form.clickable,
-                      productIds: form.clickable ? [] : form.productIds,
-                      promotionalPrices: form.clickable
-                        ? {}
-                        : form.promotionalPrices,
                     })
                   }
                 />
               </label>
 
               {form.clickable && (
-                <section className="sm:col-span-2">
-                  <b>Produtos vinculados</b>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Esses produtos aparecerão no modal da promoção.
-                  </p>
+                <div className="space-y-3 sm:col-span-2">
+                  {products.map((product) => {
+                    const selected =
+                      form.productIds.includes(
+                        product.id,
+                      );
 
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {products.map((product) => {
-                      const selected = form.productIds.includes(product.id);
+                    return (
+                      <div
+                        key={product.id}
+                        className="rounded-xl border p-3"
+                      >
+                        <label className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={(event) => {
+                              const checked =
+                                event.target.checked;
 
-                      return (
-                        <div
-                          key={product.id}
-                          className={`rounded-xl border p-3 ${
-                            selected ? 'border-green-300 bg-green-50/40' : ''
-                          }`}
-                        >
-                          <label className="flex cursor-pointer items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={(event) => {
-                                const checked = event.target.checked;
-
-                                setForm({
-                                  ...form,
-                                  productIds: checked
-                                    ? [...form.productIds, product.id]
-                                    : form.productIds.filter(
-                                        (id) => id !== product.id,
-                                      ),
-                                  promotionalPrices: checked
+                              setForm({
+                                ...form,
+                                productIds: checked
+                                  ? [
+                                      ...form.productIds,
+                                      product.id,
+                                    ]
+                                  : form.productIds.filter(
+                                      (id) =>
+                                        id !== product.id,
+                                    ),
+                                promotionalPrices:
+                                  checked
                                     ? {
                                         ...form.promotionalPrices,
-                                        [product.id]: Number(
-                                          Math.max(product.price - 1, 0.01).toFixed(2),
-                                        ),
+                                        [product.id]:
+                                          Math.max(
+                                            product.price - 1,
+                                            0.01,
+                                          ),
                                       }
                                     : Object.fromEntries(
                                         Object.entries(
                                           form.promotionalPrices,
-                                        ).filter(([id]) => id !== product.id),
+                                        ).filter(
+                                          ([id]) =>
+                                            id !== product.id,
+                                        ),
                                       ),
-                                });
-                              }}
-                            />
-                            <img
-                              src={product.imageUrl}
-                              alt={product.name}
-                              className="h-12 w-12 rounded-lg object-cover"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <span className="block truncate font-bold">
-                                {product.name}
-                              </span>
-                              <small className="text-slate-500">
-                                Valor original: {formatCurrency(product.price)}
-                              </small>
-                            </div>
-                          </label>
+                              });
+                            }}
+                          />
 
-                          {selected && (
-                            <label className="mt-3 block border-t pt-3">
-                              <span className="mb-1 block text-sm font-bold">
-                                Valor promocional
-                              </span>
-                              <Input
-                                type="number"
-                                min="0.01"
-                                max={Math.max(product.price - 0.01, 0.01)}
-                                step="0.01"
-                                value={form.promotionalPrices[product.id] ?? ''}
-                                onChange={(event) =>
-                                  setForm({
-                                    ...form,
-                                    promotionalPrices: {
-                                      ...form.promotionalPrices,
-                                      [product.id]: Number(event.target.value),
-                                    },
-                                  })
-                                }
-                              />
-                              <small className="mt-1 block text-slate-500">
-                                No cardápio: <span className="line-through">
-                                  {formatCurrency(product.price)}
-                                </span>{' '}
-                                <strong className="text-green-700">
-                                  {formatCurrency(
-                                    form.promotionalPrices[product.id] || 0,
-                                  )}
-                                </strong>
-                              </small>
-                            </label>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
+                          <span className="font-bold">
+                            {product.name}
+                          </span>
+
+                          <span className="text-sm text-slate-500">
+                            {formatCurrency(
+                              product.price,
+                            )}
+                          </span>
+                        </label>
+
+                        {selected && (
+                          <Input
+                            className="mt-3"
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={
+                              form.promotionalPrices[
+                                product.id
+                              ] ?? ''
+                            }
+                            onChange={(event) =>
+                              setForm({
+                                ...form,
+                                promotionalPrices: {
+                                  ...form.promotionalPrices,
+                                  [product.id]: Number(
+                                    event.target.value,
+                                  ),
+                                },
+                              })
+                            }
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
 
-              <Button className="sm:col-span-2">Salvar promoção</Button>
+              <Button
+                className="sm:col-span-2"
+                disabled={saving}
+              >
+                {saving
+                  ? 'Salvando...'
+                  : 'Salvar promoção'}
+              </Button>
             </div>
           </form>
         </div>

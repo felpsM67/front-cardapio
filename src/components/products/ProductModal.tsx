@@ -1,7 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Minus, Plus, X } from 'lucide-react';
-import type { CartOptionItem, Product, ProductOptionItem } from '../../models';
-import { addonService } from '../../services/addonService';
+
+import type {
+  AddonGroup,
+  CartOptionItem,
+  Product,
+  ProductOptionItem,
+} from '../../models';
+import { addonGroupService } from '../../services/addonGroupService';
 import { formatCurrency } from '../../utils/format';
 import { useCart } from '../../contexts/CartContext';
 
@@ -20,7 +26,37 @@ export function ProductModal({
   const [notes, setNotes] = useState('');
   const [selected, setSelected] = useState<CartOptionItem[]>([]);
   const { add } = useCart();
-  const groups = addonService.getForProduct(product.id);
+  useEffect(() => {
+    async function loadGroups(): Promise<void> {
+      try {
+        setLoadingGroups(true);
+        setGroupsError(null);
+      
+        const response = await addonGroupService.getForProduct(
+          product.id,
+        );
+        console.log('ID do produto:', product.id);
+        console.log('Grupos encontrados:', response);
+
+        setGroups(response.filter((group) => group.active));
+      } catch (error) {
+        console.error('Erro ao carregar adicionais:', error);
+
+        setGroupsError(
+          error instanceof Error
+            ? error.message
+            : 'Erro ao carregar adicionais.',
+        );
+      } finally {
+        setLoadingGroups(false);
+      }
+    }
+
+    void loadGroups();
+  }, [product.id]);
+  const [groups, setGroups] = useState<AddonGroup[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(true);
+  const [groupsError, setGroupsError] = useState<string | null>(null);
   const hasPromotion =
     originalPrice !== undefined && originalPrice > product.price;
 
@@ -127,7 +163,38 @@ export function ProductModal({
               )}
             </div>
           </div>
+          {loadingGroups && (
+  <div className="flex justify-center py-6">
+    <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-orange-500" />
+  </div>
+)}
 
+{!loadingGroups && groupsError && (
+  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+    {groupsError}
+  </div>
+)}
+
+{!loadingGroups &&
+  !groupsError &&
+  groups.map((group) => {
+    const availableItems = group.items.filter(
+      (item) => item.available,
+    );
+
+    const groupItemIds = availableItems.map(
+      (item) => item.id,
+    );
+
+    const selectedCount =
+      getGroupSelectionCount(groupItemIds);
+
+    return (
+      <section key={group.id}>
+        {/* restante do seu código */}
+      </section>
+    );
+  })}
           {groups.map((group) => {
             const availableItems = group.items.filter((item) => item.available);
             const groupItemIds = availableItems.map((item) => item.id);

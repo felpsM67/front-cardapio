@@ -2,9 +2,9 @@ import type { AddonGroup } from '../models';
 import { apiClient } from '../api/apiClient';
 import { STORAGE_KEYS } from '../constants/storage';
 import { storageService } from './storageService';
-import { useEffect, useMemo, useState } from 'react';
 
-const GROUP_ENDPOINTS = ['/adicionais/grupos', '/adicionais', '/grupos-adicionais'];
+
+const GROUP_ENDPOINTS = ['/grupos-adicionais', '/adicionais', '/grupos-adicionais'];
 
 let addonGroups: AddonGroup[] = storageService.get<AddonGroup[]>(
   STORAGE_KEYS.ADDONS,

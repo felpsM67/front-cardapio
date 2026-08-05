@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from 'react';
 import {
   Check,
   Pencil,
@@ -7,148 +13,274 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+
 import type {
   AddonCatalogItem,
   AddonGroup,
   Product,
   ProductOptionItem,
 } from '../../models';
+
 import { addonCatalogService } from '../../services/addonCatalogService';
-import { addonService } from '../../services/addonService';
+import { addonGroupService } from '../../services/addonGroupService';
 import { categoryService } from '../../services/categoryService';
 import { productService } from '../../services/productService';
+
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Toggle } from '../../components/common/Toggle';
 import { formatCurrency } from '../../utils/format';
 
-const emptyProduct = (): Omit<Product, 'id' | 'createdAt' | 'updatedAt'> => ({
+type ProductForm = Omit<
+  Product,
+  'id' | 'createdAt' | 'updatedAt'
+>;
+
+const emptyProduct = (): ProductForm => ({
   name: '',
   description: '',
   price: 0,
   imageUrl: '',
-  categoryId: 'cat-1',
+  categoryId: '',
   available: true,
   featured: false,
   order: 1,
 });
 
-
-
 export function ProductsPage() {
   const [, refresh] = useState(0);
+
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyProduct());
-  const [addonItems, setAddonItems] = useState<ProductOptionItem[]>([]);
-  const [catalogItems, setCatalogItems] = useState<AddonCatalogItem[]>([]);
-  const [addonSearch, setAddonSearch] = useState('');
-  const [showAddonForm, setShowAddonForm] = useState(false);
-  const [editingAddonId, setEditingAddonId] = useState<string | null>(null);
-  const [addonForm, setAddonForm] = useState({ name: '', price: 0 });
-  const [maxSelections, setMaxSelections] = useState(3);
+  const [editingId, setEditingId] =
+    useState<string | null>(null);
+
+  const [form, setForm] =
+    useState<ProductForm>(emptyProduct());
+
+  const [addonItems, setAddonItems] =
+    useState<ProductOptionItem[]>([]);
+
+  const [catalogItems, setCatalogItems] =
+    useState<AddonCatalogItem[]>([]);
+
+  const [addonGroups, setAddonGroups] =
+    useState<AddonGroup[]>([]);
+
+  const [addonSearch, setAddonSearch] =
+    useState('');
+
+  const [showAddonForm, setShowAddonForm] =
+    useState(false);
+
+  const [editingAddonId, setEditingAddonId] =
+    useState<string | null>(null);
+
+  const [addonForm, setAddonForm] = useState({
+    name: '',
+    price: 0,
+  });
+
+  const [maxSelections, setMaxSelections] =
+    useState(3);
+
+  const [loadingAddons, setLoadingAddons] =
+    useState(true);
+
+  const [savingProduct, setSavingProduct] =
+    useState(false);
 
   const products = productService.getAll();
   const categories = categoryService.getAll();
 
-  const filteredCatalog = useMemo(() => {
-    const search = addonSearch.trim().toLocaleLowerCase('pt-BR');
   useEffect(() => {
-  async function loadCatalog(): Promise<void> {
+    void loadAddonData();
+  }, []);
+
+  async function loadAddonData(): Promise<void> {
     try {
-      const items = await addonCatalogService.getAll();
-      setCatalogItems(items);
+      setLoadingAddons(true);
+
+      const [catalog, groups] = await Promise.all([
+        addonCatalogService.getAll(),
+        addonGroupService.getAll(),
+      ]);
+
+      setCatalogItems(catalog);
+      setAddonGroups(groups);
     } catch (error) {
-      console.error('Erro ao carregar adicionais:', error);
+      console.error(
+        'Erro ao carregar adicionais:',
+        error,
+      );
 
       alert(
         error instanceof Error
           ? error.message
           : 'Erro ao carregar adicionais.',
       );
+    } finally {
+      setLoadingAddons(false);
     }
   }
 
-  void loadCatalog();
-}, []);
-    if (!search) return catalogItems;
+  const filteredCatalog = useMemo(() => {
+    const search = addonSearch
+      .trim()
+      .toLocaleLowerCase('pt-BR');
+
+    if (!search) {
+      return catalogItems;
+    }
 
     return catalogItems.filter((item) =>
-      item.name.toLocaleLowerCase('pt-BR').includes(search),
+      item.name
+        .toLocaleLowerCase('pt-BR')
+        .includes(search),
     );
   }, [addonSearch, catalogItems]);
 
-  function openNewProduct() {
+  function getProductAddonCount(
+    productId: string,
+  ): number {
+    return addonGroups
+      .filter((group) =>
+        group.applicableProductIds.includes(productId),
+      )
+      .reduce(
+        (total, group) =>
+          total + group.items.length,
+        0,
+      );
+  }
+
+  function openNewProduct(): void {
     setEditingId(null);
+
     setForm({
       ...emptyProduct(),
       categoryId: categories[0]?.id ?? '',
       order: products.length + 1,
     });
+
     setAddonItems([]);
     setMaxSelections(3);
     setAddonSearch('');
+    closeAddonForm();
     setModalOpen(true);
   }
 
-  function openProduct(product: Product) {
-    const group = addonService.getForProduct(product.id)[0];
+  async function openProduct(
+    product: Product,
+  ): Promise<void> {
+    try {
+      const groups =
+        await addonGroupService.getForProduct(
+          product.id,
+        );
 
-    setEditingId(product.id);
-    setForm({
-      name: product.name,
-      description: product.description,
-      price: product.price,
-      imageUrl: product.imageUrl,
-      categoryId: product.categoryId,
-      available: product.available,
-      featured: product.featured,
-      order: product.order,
-    });
-    setAddonItems(group?.items.map((item) => ({ ...item })) ?? []);
-    setMaxSelections(group?.maxSelections ?? 3);
-    setAddonSearch('');
-    setModalOpen(true);
+      const group = groups[0];
+
+      setEditingId(product.id);
+
+      setForm({
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        imageUrl: product.imageUrl,
+        categoryId: product.categoryId,
+        available: product.available,
+        featured: product.featured,
+        order: product.order,
+      });
+
+      setAddonItems(
+        group?.items.map((item) => ({
+          ...item,
+        })) ?? [],
+      );
+
+      setMaxSelections(
+        group?.maxSelections ?? 3,
+      );
+
+      setAddonSearch('');
+      closeAddonForm();
+      setModalOpen(true);
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao carregar adicionais do produto.',
+      );
+    }
   }
 
-  function closeModal() {
+  function closeModal(): void {
+    if (savingProduct) {
+      return;
+    }
+
     setModalOpen(false);
     setEditingId(null);
     setForm(emptyProduct());
     setAddonItems([]);
+    setAddonSearch('');
     closeAddonForm();
   }
 
-  function closeAddonForm() {
+  function closeAddonForm(): void {
     setShowAddonForm(false);
     setEditingAddonId(null);
-    setAddonForm({ name: '', price: 0 });
+    setAddonForm({
+      name: '',
+      price: 0,
+    });
   }
 
-  function uploadImage(file?: File) {
-    if (!file) return;
+  function uploadImage(file?: File): void {
+    if (!file) {
+      return;
+    }
 
     const reader = new FileReader();
+
     reader.onload = () => {
       setForm((current) => ({
         ...current,
         imageUrl: String(reader.result),
       }));
     };
+
+    reader.onerror = () => {
+      alert('Não foi possível carregar a imagem.');
+    };
+
     reader.readAsDataURL(file);
   }
 
-  function isAddonSelected(id: string) {
-    return addonItems.some((item) => item.id === id);
+  function isAddonSelected(
+    id: string,
+  ): boolean {
+    return addonItems.some(
+      (item) => item.id === id,
+    );
   }
 
-  function toggleAddon(item: AddonCatalogItem) {
-    if (!item.available) return;
+  function toggleAddon(
+    item: AddonCatalogItem,
+  ): void {
+    if (!item.available) {
+      return;
+    }
 
     if (isAddonSelected(item.id)) {
       setAddonItems((current) =>
-        current.filter((selected) => selected.id !== item.id),
+        current.filter(
+          (selected) =>
+            selected.id !== item.id,
+        ),
       );
+
       return;
     }
 
@@ -163,13 +295,20 @@ export function ProductsPage() {
     ]);
   }
 
-  function startEditingAddon(item: AddonCatalogItem) {
+  function startEditingAddon(
+    item: AddonCatalogItem,
+  ): void {
     setEditingAddonId(item.id);
-    setAddonForm({ name: item.name, price: item.price });
+
+    setAddonForm({
+      name: item.name,
+      price: item.price,
+    });
+
     setShowAddonForm(true);
   }
 
-    async function saveCatalogAddon(): Promise<void> {
+  async function saveCatalogAddon(): Promise<void> {
     const name = addonForm.name.trim();
 
     if (!name) {
@@ -178,20 +317,28 @@ export function ProductsPage() {
     }
 
     if (addonForm.price < 0) {
-      alert('O valor do adicional não pode ser negativo.');
+      alert(
+        'O valor do adicional não pode ser negativo.',
+      );
       return;
     }
 
     try {
       if (editingAddonId) {
-        const updated = await addonCatalogService.update(editingAddonId, {
-          name,
-          price: addonForm.price,
-        });
+        const updated =
+          await addonCatalogService.update(
+            editingAddonId,
+            {
+              name,
+              price: addonForm.price,
+            },
+          );
 
         setCatalogItems((current) =>
           current.map((item) =>
-            item.id === editingAddonId ? updated : item,
+            item.id === editingAddonId
+              ? updated
+              : item,
           ),
         );
 
@@ -202,19 +349,24 @@ export function ProductsPage() {
                   ...item,
                   name: updated.name,
                   price: updated.price,
-                  available: updated.available,
+                  available:
+                    updated.available,
                 }
               : item,
           ),
         );
       } else {
-        const created = await addonCatalogService.create({
-          name,
-          price: addonForm.price,
-          available: true,
-        });
+        const created =
+          await addonCatalogService.create({
+            name,
+            price: addonForm.price,
+            available: true,
+          });
 
-        setCatalogItems((current) => [...current, created]);
+        setCatalogItems((current) => [
+          ...current,
+          created,
+        ]);
 
         setAddonItems((current) => [
           ...current,
@@ -238,119 +390,133 @@ export function ProductsPage() {
   }
 
   async function toggleCatalogAvailability(
-  item: AddonCatalogItem,
-): Promise<void> {
-  try {
-    const updated = await addonCatalogService.update(item.id, {
-      available: !item.available,
-    });
+    item: AddonCatalogItem,
+  ): Promise<void> {
+    try {
+      const updated =
+        await addonCatalogService.update(
+          item.id,
+          {
+            available: !item.available,
+          },
+        );
 
-    setCatalogItems((current) =>
-      current.map((catalogItem) =>
-        catalogItem.id === item.id ? updated : catalogItem,
-      ),
-    );
+      setCatalogItems((current) =>
+        current.map((catalogItem) =>
+          catalogItem.id === item.id
+            ? updated
+            : catalogItem,
+        ),
+      );
 
-    if (!updated.available) {
-      setAddonItems((current) =>
-        current.filter((selected) => selected.id !== item.id),
+      if (!updated.available) {
+        setAddonItems((current) =>
+          current.filter(
+            (selected) =>
+              selected.id !== item.id,
+          ),
+        );
+      }
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao alterar disponibilidade do adicional.',
       );
     }
-  } catch (error) {
-    alert(
-      error instanceof Error
-        ? error.message
-        : 'Erro ao alterar disponibilidade do adicional.',
-    );
-  }
-}
-
- async function removeCatalogAddon(
-  item: AddonCatalogItem,
-): Promise<void> {
-  if (!confirm(`Excluir o adicional “${item.name}” da lista?`)) {
-    return;
   }
 
-  try {
-    await addonCatalogService.remove(item.id);
+  async function removeCatalogAddon(
+    item: AddonCatalogItem,
+  ): Promise<void> {
+    if (
+      !confirm(
+        `Excluir o adicional “${item.name}” da lista?`,
+      )
+    ) {
+      return;
+    }
 
-    setCatalogItems((current) =>
-      current.filter((catalogItem) => catalogItem.id !== item.id),
-    );
+    try {
+      await addonCatalogService.remove(item.id);
 
-    setAddonItems((current) =>
-      current.filter((selected) => selected.id !== item.id),
-    );
-  } catch (error) {
-    alert(
-      error instanceof Error
-        ? error.message
-        : 'Erro ao excluir adicional.',
-    );
-  }
-}
-
-async function saveAddons(
-  productId: string,
-  productName: string,
-): Promise<void> {
-  const selectedIds = new Set(
-    addonItems.map((item) => item.id),
-  );
-
-  const currentCatalog = await addonCatalogService.getAll();
-
-  const cleanItems = currentCatalog
-    .filter(
-      (item) =>
-        selectedIds.has(item.id) &&
-        item.available,
-    )
-    .map(({ id, name, price, available }) => ({
-      id,
-      name,
-      price,
-      available,
-    }));
-
-  const existingGroups = addonService.getAll();
-
-  const groupsWithoutProduct = existingGroups
-    .map((group) => ({
-      ...group,
-      applicableProductIds:
-        group.applicableProductIds.filter(
-          (id) => id !== productId,
+      setCatalogItems((current) =>
+        current.filter(
+          (catalogItem) =>
+            catalogItem.id !== item.id,
         ),
-    }))
-    .filter(
-      (group) =>
-        group.applicableProductIds.length > 0,
-    );
+      );
 
-  if (!cleanItems.length) {
-    addonService.save(groupsWithoutProduct);
-    return;
+      setAddonItems((current) =>
+        current.filter(
+          (selected) =>
+            selected.id !== item.id,
+        ),
+      );
+
+      await loadAddonData();
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao excluir adicional.',
+      );
+    }
   }
 
-  const group: AddonGroup = {
-    id: crypto.randomUUID(),
-    name: `Adicionais de ${productName}`,
-    required: false,
-    maxSelections,
-    active: true,
-    applicableProductIds: [productId],
-    items: cleanItems,
-  };
+  async function saveAddons(
+    productId: string,
+    productName: string,
+  ): Promise<void> {
+    const existingGroups =
+      await addonGroupService.getForProduct(
+        productId,
+      );
 
-  addonService.save([
-    ...groupsWithoutProduct,
-    group,
-  ]);
-}
+    const [existingGroup, ...extraGroups] =
+      existingGroups;
 
-  async function saveProduct(event: React.FormEvent) {
+    for (const group of extraGroups) {
+      await addonGroupService.remove(group.id);
+    }
+
+    if (!addonItems.length) {
+      if (existingGroup) {
+        await addonGroupService.remove(
+          existingGroup.id,
+        );
+      }
+
+      return;
+    }
+
+    const groupData: Omit<
+      AddonGroup,
+      'id'
+    > = {
+      name: `Adicionais de ${productName}`,
+      required: false,
+      maxSelections,
+      active: true,
+      applicableProductIds: [productId],
+      items: addonItems,
+    };
+
+    if (existingGroup) {
+      await addonGroupService.update(
+        existingGroup.id,
+        groupData,
+      );
+
+      return;
+    }
+
+    await addonGroupService.create(groupData);
+  }
+
+  async function saveProduct(
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<void> {
     event.preventDefault();
 
     if (!form.name.trim()) {
@@ -359,44 +525,96 @@ async function saveAddons(
     }
 
     if (!form.categoryId) {
-      alert('Cadastre e selecione uma categoria.');
+      alert(
+        'Cadastre e selecione uma categoria.',
+      );
       return;
     }
 
     try {
+      setSavingProduct(true);
+
       const savedProduct = editingId
-        ? await productService.update(editingId, form)
+        ? await productService.update(
+            editingId,
+            form,
+          )
         : await productService.create(form);
 
       await saveAddons(
         savedProduct.id,
         savedProduct.name,
       );
-      closeModal();
+
+      await loadAddonData();
+
+      setModalOpen(false);
+      setEditingId(null);
+      setForm(emptyProduct());
+      setAddonItems([]);
+      closeAddonForm();
+
       refresh((value) => value + 1);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Erro ao salvar produto.');
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao salvar produto.',
+      );
+    } finally {
+      setSavingProduct(false);
     }
   }
 
-  async function removeProduct(product: Product) {
-    if (!confirm(`Excluir o produto “${product.name}”?`)) return;
-
-    const remainingGroups = addonService
-      .getAll()
-      .map((group) => ({
-        ...group,
-        applicableProductIds: group.applicableProductIds.filter(
-          (id) => id !== product.id,
-        ),
-      }))
-      .filter((group) => group.applicableProductIds.length > 0);
-
+  async function toggleProductAvailability(
+    product: Product,
+  ): Promise<void> {
     try {
-      await productService.remove(product.id);
+      await productService.toggleAvailability(
+        product.id,
+      );
+
       refresh((value) => value + 1);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Erro ao excluir produto.');
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao alterar disponibilidade.',
+      );
+    }
+  }
+
+  async function removeProduct(
+    product: Product,
+  ): Promise<void> {
+    if (
+      !confirm(
+        `Excluir o produto “${product.name}”?`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const groups =
+        await addonGroupService.getForProduct(
+          product.id,
+        );
+
+      for (const group of groups) {
+        await addonGroupService.remove(group.id);
+      }
+
+      await productService.remove(product.id);
+      await loadAddonData();
+
+      refresh((value) => value + 1);
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao excluir produto.',
+      );
     }
   }
 
@@ -404,13 +622,20 @@ async function saveAddons(
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-black">Produtos e adicionais</h1>
+          <h1 className="text-3xl font-black">
+            Produtos e adicionais
+          </h1>
+
           <p className="mt-1 text-slate-500">
-            Cadastre produtos e escolha adicionais de uma lista reutilizável.
+            Cadastre produtos e escolha adicionais
+            de uma lista reutilizável.
           </p>
         </div>
 
-        <Button onClick={openNewProduct}>
+        <Button
+          type="button"
+          onClick={openNewProduct}
+        >
           <Plus size={18} />
           Adicionar item
         </Button>
@@ -418,49 +643,63 @@ async function saveAddons(
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {products.map((product) => {
-          const groups = addonService.getForProduct(product.id);
-          const addonCount = groups.reduce(
-            (total, group) => total + group.items.length,
-            0,
-          );
+          const addonCount =
+            getProductAddonCount(product.id);
 
           return (
             <article
               key={product.id}
-              onClick={() => openProduct(product)}
+              onClick={() =>
+                void openProduct(product)
+              }
               className="cursor-pointer overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
-              <img
-                src={product.imageUrl}
-                alt={product.name}
-                className="aspect-[16/9] w-full object-cover"
-              />
+              {product.imageUrl ? (
+                <img
+                  src={product.imageUrl}
+                  alt={product.name}
+                  className="aspect-[16/9] w-full object-cover"
+                />
+              ) : (
+                <div className="aspect-[16/9] w-full bg-slate-200" />
+              )}
 
               <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h2 className="truncate font-black">{product.name}</h2>
+                    <h2 className="truncate font-black">
+                      {product.name}
+                    </h2>
+
                     <p
                       className="mt-1 font-bold"
-                      style={{ color: 'var(--primary)' }}
+                      style={{
+                        color: 'var(--primary)',
+                      }}
                     >
                       {formatCurrency(product.price)}
                     </p>
+
                     <p className="mt-1 text-sm text-slate-500">
-                      {addonCount} adicional(is) selecionado(s)
+                      {loadingAddons
+                        ? 'Carregando adicionais...'
+                        : `${addonCount} adicional(is) selecionado(s)`}
                     </p>
                   </div>
 
-                  <div onClick={(event) => event.stopPropagation()}>
+                  <div
+                    onClick={(event) =>
+                      event.stopPropagation()
+                    }
+                  >
                     <Toggle
-                      checked={form.available}
+                      checked={product.available}
                       labelOn="Ativo"
                       labelOff="Inativo"
                       onChange={() =>
-                        setForm((current) => ({
-                          ...current,
-                          available: !current.available,
-                        }))
+                        void toggleProductAvailability(
+                          product,
+                        )
                       }
                     />
                   </div>
@@ -468,14 +707,16 @@ async function saveAddons(
 
                 <div className="mt-4 flex gap-2">
                   <button
+                    type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      openProduct(product);
+                      void openProduct(product);
                     }}
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl border py-2 text-sm font-bold"
                     style={{
                       color: 'var(--primary)',
-                      borderColor: 'var(--primary)',
+                      borderColor:
+                        'var(--primary)',
                     }}
                   >
                     <Pencil size={16} />
@@ -483,8 +724,10 @@ async function saveAddons(
                   </button>
 
                   <button
+                    type="button"
                     onClick={(event) => {
                       event.stopPropagation();
+
                       void removeProduct(product);
                     }}
                     aria-label={`Excluir ${product.name}`}
@@ -499,31 +742,48 @@ async function saveAddons(
         })}
       </div>
 
+      {!products.length && (
+        <div className="mt-6 rounded-2xl border border-dashed bg-white p-10 text-center text-slate-500">
+          Nenhum produto cadastrado.
+        </div>
+      )}
+
       {modalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 sm:items-center sm:p-4"
-          onMouseDown={(event) =>
-            event.target === event.currentTarget && closeModal()
-          }
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget
+            ) {
+              closeModal();
+            }
+          }}
         >
           <form
-            onSubmit={saveProduct}
+            onSubmit={(event) =>
+              void saveProduct(event)
+            }
             className="max-h-[94vh] w-full overflow-y-auto rounded-t-3xl bg-white sm:max-w-4xl sm:rounded-3xl"
           >
             <div className="sticky top-0 z-20 flex items-center justify-between border-b bg-white p-5">
               <div>
                 <h2 className="text-xl font-black">
-                  {editingId ? 'Editar produto' : 'Adicionar produto'}
+                  {editingId
+                    ? 'Editar produto'
+                    : 'Adicionar produto'}
                 </h2>
+
                 <p className="text-sm text-slate-500">
-                  Dados do item e adicionais no mesmo formulário.
+                  Dados do item e adicionais no mesmo
+                  formulário.
                 </p>
               </div>
 
               <button
                 type="button"
+                disabled={savingProduct}
                 onClick={closeModal}
-                className="rounded-full bg-slate-100 p-2"
+                className="rounded-full bg-slate-100 p-2 disabled:opacity-50"
               >
                 <X />
               </button>
@@ -531,14 +791,19 @@ async function saveAddons(
 
             <div className="space-y-7 p-5">
               <section>
-                <h3 className="mb-3 text-lg font-black">Informações do item</h3>
+                <h3 className="mb-3 text-lg font-black">
+                  Informações do item
+                </h3>
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Input
                     placeholder="Nome do produto"
                     value={form.name}
                     onChange={(event) =>
-                      setForm({ ...form, name: event.target.value })
+                      setForm({
+                        ...form,
+                        name: event.target.value,
+                      })
                     }
                   />
 
@@ -549,7 +814,12 @@ async function saveAddons(
                     step="0.01"
                     value={form.price}
                     onChange={(event) =>
-                      setForm({ ...form, price: Number(event.target.value) })
+                      setForm({
+                        ...form,
+                        price: Number(
+                          event.target.value,
+                        ),
+                      })
                     }
                   />
 
@@ -557,11 +827,22 @@ async function saveAddons(
                     className="rounded-xl border px-4 py-3"
                     value={form.categoryId}
                     onChange={(event) =>
-                      setForm({ ...form, categoryId: event.target.value })
+                      setForm({
+                        ...form,
+                        categoryId:
+                          event.target.value,
+                      })
                     }
                   >
+                    <option value="">
+                      Selecione uma categoria
+                    </option>
+
                     {categories.map((category) => (
-                      <option value={category.id} key={category.id}>
+                      <option
+                        value={category.id}
+                        key={category.id}
+                      >
                         {category.name}
                       </option>
                     ))}
@@ -573,7 +854,15 @@ async function saveAddons(
                     min="1"
                     value={form.order}
                     onChange={(event) =>
-                      setForm({ ...form, order: Number(event.target.value) })
+                      setForm({
+                        ...form,
+                        order: Math.max(
+                          1,
+                          Number(
+                            event.target.value,
+                          ),
+                        ),
+                      })
                     }
                   />
 
@@ -582,20 +871,26 @@ async function saveAddons(
                     placeholder="Descrição do produto"
                     value={form.description}
                     onChange={(event) =>
-                      setForm({ ...form, description: event.target.value })
+                      setForm({
+                        ...form,
+                        description:
+                          event.target.value,
+                      })
                     }
                   />
-
                   <label className="rounded-xl border p-3 sm:col-span-2">
                     <span className="block text-sm font-semibold">
-                      Imagem do computador
+                      Selecione uma imagem
                     </span>
+
                     <input
                       className="mt-2 w-full text-sm"
                       type="file"
                       accept="image/*"
                       onChange={(event) =>
-                        uploadImage(event.target.files?.[0])
+                        uploadImage(
+                          event.target.files?.[0],
+                        )
                       }
                     />
                   </label>
@@ -609,7 +904,9 @@ async function saveAddons(
                   )}
 
                   <label className="flex items-center justify-between rounded-xl border p-3">
-                    <span className="font-semibold">Produto no cardápio</span>
+                    <span className="font-semibold">
+                      Produto no cardápio
+                    </span>
 
                     <Toggle
                       checked={form.available}
@@ -618,18 +915,26 @@ async function saveAddons(
                       onChange={() =>
                         setForm((current) => ({
                           ...current,
-                          available: !current.available,
+                          available:
+                            !current.available,
                         }))
                       }
                     />
                   </label>
 
                   <label className="flex items-center justify-between rounded-xl border p-3">
-                    <span className="font-semibold">Produto em destaque</span>
+                    <span className="font-semibold">
+                      Produto em destaque
+                    </span>
+
                     <Toggle
                       checked={form.featured}
                       onChange={() =>
-                        setForm({ ...form, featured: !form.featured })
+                        setForm((current) => ({
+                          ...current,
+                          featured:
+                            !current.featured,
+                        }))
                       }
                     />
                   </label>
@@ -639,9 +944,13 @@ async function saveAddons(
               <section className="border-t pt-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-lg font-black">Adicionais do item</h3>
+                    <h3 className="text-lg font-black">
+                      Adicionais do item
+                    </h3>
+
                     <p className="text-sm text-slate-500">
-                      Selecione na lista. Você só cadastra cada adicional uma vez.
+                      Selecione na lista. Você só
+                      cadastra cada adicional uma vez.
                     </p>
                   </div>
 
@@ -654,7 +963,8 @@ async function saveAddons(
                     className="flex items-center gap-1 rounded-xl border px-3 py-2 text-sm font-bold"
                     style={{
                       color: 'var(--primary)',
-                      borderColor: 'var(--primary)',
+                      borderColor:
+                        'var(--primary)',
                     }}
                   >
                     <Plus size={17} />
@@ -668,9 +978,14 @@ async function saveAddons(
                       size={18}
                       className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                     />
+
                     <input
                       value={addonSearch}
-                      onChange={(event) => setAddonSearch(event.target.value)}
+                      onChange={(event) =>
+                        setAddonSearch(
+                          event.target.value,
+                        )
+                      }
                       placeholder="Buscar adicional..."
                       className="w-full rounded-xl border py-3 pl-10 pr-4 outline-none focus:ring-2"
                     />
@@ -680,19 +995,26 @@ async function saveAddons(
                     <span className="sr-only">
                       Máximo de adicionais por pedido
                     </span>
+
                     <Input
                       type="number"
                       min="1"
                       value={maxSelections}
                       onChange={(event) =>
                         setMaxSelections(
-                          Math.max(1, Number(event.target.value)),
+                          Math.max(
+                            1,
+                            Number(
+                              event.target.value,
+                            ),
+                          ),
                         )
                       }
-                      title="Máximo de adicionais por pedido"
                     />
+
                     <small className="mt-1 block text-slate-500">
-                      Máximo por pedido: {maxSelections}
+                      Máximo por pedido:{' '}
+                      {maxSelections}
                     </small>
                   </label>
                 </div>
@@ -703,11 +1025,13 @@ async function saveAddons(
                       <div>
                         <h4 className="font-black">
                           {editingAddonId
-                            ? 'Editar adicional da lista'
-                            : 'Cadastrar na lista'}
+                            ? 'Editar adicional'
+                            : 'Cadastrar adicional'}
                         </h4>
+
                         <p className="text-sm text-slate-500">
-                          Depois ele poderá ser usado em qualquer produto.
+                          Depois ele poderá ser usado em
+                          qualquer produto.
                         </p>
                       </div>
 
@@ -741,16 +1065,22 @@ async function saveAddons(
                         onChange={(event) =>
                           setAddonForm({
                             ...addonForm,
-                            price: Number(event.target.value),
+                            price: Number(
+                              event.target.value,
+                            ),
                           })
                         }
                       />
 
                       <Button
                         type="button"
-                        onClick={() => void saveCatalogAddon()}
+                        onClick={() =>
+                          void saveCatalogAddon()
+                        }
                       >
-                        {editingAddonId ? 'Atualizar' : 'Cadastrar'}
+                        {editingAddonId
+                          ? 'Atualizar'
+                          : 'Cadastrar'}
                       </Button>
                     </div>
                   </div>
@@ -758,7 +1088,8 @@ async function saveAddons(
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   {filteredCatalog.map((item) => {
-                    const selected = isAddonSelected(item.id);
+                    const selected =
+                      isAddonSelected(item.id);
 
                     return (
                       <article
@@ -767,10 +1098,17 @@ async function saveAddons(
                           selected
                             ? 'border-transparent bg-orange-50 ring-2'
                             : 'bg-white'
-                        } ${!item.available ? 'opacity-60' : ''}`}
+                        } ${
+                          !item.available
+                            ? 'opacity-60'
+                            : ''
+                        }`}
                         style={
                           selected
-                            ? ({ '--tw-ring-color': 'var(--primary)' } as React.CSSProperties)
+                            ? ({
+                                '--tw-ring-color':
+                                  'var(--primary)',
+                              } as CSSProperties)
                             : undefined
                         }
                       >
@@ -778,56 +1116,70 @@ async function saveAddons(
                           <button
                             type="button"
                             disabled={!item.available}
-                            onClick={() => toggleAddon(item)}
+                            onClick={() =>
+                              toggleAddon(item)
+                            }
                             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition ${
-                              selected ? 'text-white' : 'bg-white'
+                              selected
+                                ? 'text-white'
+                                : 'bg-white'
                             }`}
                             style={
                               selected
                                 ? {
-                                    backgroundColor: 'var(--primary)',
-                                    borderColor: 'var(--primary)',
+                                    backgroundColor:
+                                      'var(--primary)',
+                                    borderColor:
+                                      'var(--primary)',
                                   }
                                 : undefined
                             }
-                            aria-label={
-                              selected
-                                ? `Remover ${item.name}`
-                                : `Selecionar ${item.name}`
-                            }
                           >
-                            {selected ? <Check size={20} /> : <Plus size={20} />}
+                            {selected ? (
+                              <Check size={20} />
+                            ) : (
+                              <Plus size={20} />
+                            )}
                           </button>
 
                           <button
                             type="button"
                             disabled={!item.available}
-                            onClick={() => toggleAddon(item)}
+                            onClick={() =>
+                              toggleAddon(item)
+                            }
                             className="min-w-0 flex-1 text-left"
                           >
                             <strong className="block truncate">
                               {item.name}
                             </strong>
+
                             <span className="text-sm font-bold text-slate-600">
-                              {formatCurrency(item.price)}
+                              {formatCurrency(
+                                item.price,
+                              )}
                             </span>
                           </button>
 
                           <div className="flex shrink-0 items-center gap-1">
                             <button
                               type="button"
-                              onClick={() => startEditingAddon(item)}
+                              onClick={() =>
+                                startEditingAddon(item)
+                              }
                               className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-                              aria-label={`Editar ${item.name}`}
                             >
                               <Pencil size={16} />
                             </button>
 
                             <button
                               type="button"
-                              onClick={() => void removeCatalogAddon(item)}
+                              onClick={() =>
+                                void removeCatalogAddon(
+                                  item,
+                                )
+                              }
                               className="rounded-lg p-2 text-red-500 hover:bg-red-50"
-                              aria-label={`Excluir ${item.name}`}
                             >
                               <Trash2 size={16} />
                             </button>
@@ -845,7 +1197,11 @@ async function saveAddons(
                             checked={item.available}
                             labelOn="Ativo"
                             labelOff="Inativo"
-                            onChange={() => toggleCatalogAvailability(item)}
+                            onChange={() =>
+                              void toggleCatalogAvailability(
+                                item,
+                              )
+                            }
                           />
                         </div>
                       </article>
@@ -855,26 +1211,30 @@ async function saveAddons(
 
                 {!filteredCatalog.length && (
                   <div className="mt-4 rounded-xl border border-dashed p-6 text-center text-sm text-slate-500">
-                    Nenhum adicional encontrado. Use “Novo adicional” para
-                    cadastrar o primeiro item da lista.
+                    Nenhum adicional encontrado.
                   </div>
                 )}
 
                 {addonItems.length > 0 && (
                   <div className="mt-4 rounded-xl bg-slate-100 p-3">
                     <p className="text-sm font-bold">
-                      Selecionados ({addonItems.length})
+                      Selecionados (
+                      {addonItems.length})
                     </p>
+
                     <div className="mt-2 flex flex-wrap gap-2">
                       {addonItems.map((item) => (
                         <button
                           type="button"
                           key={item.id}
                           onClick={() =>
-                            setAddonItems((current) =>
-                              current.filter(
-                                (selected) => selected.id !== item.id,
-                              ),
+                            setAddonItems(
+                              (current) =>
+                                current.filter(
+                                  (selected) =>
+                                    selected.id !==
+                                    item.id,
+                                ),
                             )
                           }
                           className="flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-sm font-semibold shadow-sm"
@@ -888,8 +1248,16 @@ async function saveAddons(
                 )}
               </section>
 
-              <Button className="w-full" type="submit">
-                {editingId ? 'Salvar produto e adicionais' : 'Adicionar item'}
+              <Button
+                className="w-full"
+                type="submit"
+                disabled={savingProduct}
+              >
+                {savingProduct
+                  ? 'Salvando...'
+                  : editingId
+                    ? 'Salvar produto e adicionais'
+                    : 'Adicionar item'}
               </Button>
             </div>
           </form>

@@ -1,95 +1,304 @@
-import { useMemo, useState } from 'react';
-import { Clock, MousePointerClick, Search, Sparkles, Truck } from 'lucide-react';
-import type { Product, Promotion } from '../../models';
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import {
+  Clock,
+  MousePointerClick,
+  Search,
+  Sparkles,
+  Truck,
+} from 'lucide-react';
+
+import type {
+  Product,
+  Promotion,
+  StoreConfig,
+} from '../../models';
+
 import { productService } from '../../services/productService';
 import { categoryService } from '../../services/categoryService';
 import { configService } from '../../services/configService';
 import { promotionService } from '../../services/promotionService';
+
 import { ProductCard } from '../../components/products/ProductCard';
 import { ProductModal } from '../../components/products/ProductModal';
 import { PromotionModal } from '../../components/products/PromotionModal';
 import { formatCurrency } from '../../utils/format';
 
+interface CategoryItem {
+  id: string;
+  name: string;
+  active: boolean;
+}
+
+const initialConfig: StoreConfig = {
+  storeName: '',
+  description: '',
+  whatsappNumber: '',
+  pixKey: '',
+  pixHolderName: '',
+  deliveryFee: 0,
+  minimumOrder: null,
+  menuSlug: '',
+  estimatedTime: '',
+  openingHours: '',
+  isOpen: false,
+  primaryColor: '#ea580c',
+  coverUrl: '',
+};
+
+function isPromotionCurrentlyValid(
+  promotion: Promotion,
+): boolean {
+  const now = Date.now();
+
+  const startsAt = promotion.startsAt
+    ? new Date(promotion.startsAt).getTime()
+    : null;
+
+  const endsAt = promotion.endsAt
+    ? new Date(promotion.endsAt).getTime()
+    : null;
+
+  if (
+    startsAt !== null &&
+    !Number.isNaN(startsAt) &&
+    now < startsAt
+  ) {
+    return false;
+  }
+
+  if (
+    endsAt !== null &&
+    !Number.isNaN(endsAt) &&
+    now > endsAt
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export function HomePage() {
+  const [config, setConfig] =
+    useState<StoreConfig>(initialConfig);
+
+  const [products, setProducts] =
+    useState<Product[]>([]);
+
+  const [categories, setCategories] =
+    useState<CategoryItem[]>([]);
+
+  const [promotions, setPromotions] =
+    useState<Promotion[]>([]);
+
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
+
   const [selectedPromotion, setSelectedPromotion] =
     useState<Promotion | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState<{
-    product: Product;
-    originalPrice?: number;
-  } | null>(null);
 
-  const config = configService.get();
-  const products = productService.getAll();
-  const categories = categoryService.getAll().filter((item) => item.active);
-  const promotions = promotionService.getAll().filter((item) => item.active);
+  const [selectedProduct, setSelectedProduct] =
+    useState<{
+      product: Product;
+      originalPrice?: number;
+    } | null>(null);
 
-  const filteredProducts = useMemo(
-    () =>
-      products.filter(
-        (product) => {
-          const query = String(search ?? '').trim().toLowerCase();
-          const haystack = `${product.name ?? ''} ${product.description ?? ''}`.toLowerCase();
+  useEffect(() => {
+    async function loadPage(): Promise<void> {
+      try {
+        const [
+          loadedConfig,
+          loadedProducts,
+          loadedCategories,
+          loadedPromotions,
+        ] = await Promise.all([
+          configService.get(),
+          Promise.resolve(productService.getAll()),
+          Promise.resolve(categoryService.getAll()),
+          promotionService.getAll(),
+        ]);
 
-          return (
-            product.available &&
-            (category === 'all' || product.categoryId === category) &&
-            haystack.includes(query)
-          );
-        },
-      ),
-    [products, category, search],
-  );
+        setConfig(loadedConfig);
+        setProducts(loadedProducts);
+        setCategories(
+          loadedCategories.filter(
+            (item) => item.active,
+          ),
+        );
+
+        setPromotions(
+  loadedPromotions.filter(
+    (item) => item.active,
+  ),
+);
+      } catch (error) {
+        console.error(
+          'Erro ao carregar a Home:',
+          error,
+        );
+      }
+    }
+
+    async function reloadPromotions(): Promise<void> {
+      try {
+        const items =
+          await promotionService.getAll();
+
+        setPromotions(
+  items.filter(
+    (item) => item.active,
+  ),
+);
+      } catch (error) {
+        console.error(
+          'Erro ao atualizar promoções:',
+          error,
+        );
+      }
+    }
+
+    function handlePromotionUpdate(): void {
+      void reloadPromotions();
+    }
+
+    function handleConfigUpdate(event: Event): void {
+      const customEvent =
+        event as CustomEvent<StoreConfig>;
+
+      if (customEvent.detail) {
+        setConfig(customEvent.detail);
+      }
+    }
+
+    void loadPage();
+
+    window.addEventListener(
+      promotionService.updatedEvent,
+      handlePromotionUpdate,
+    );
+
+    window.addEventListener(
+      'store-config-updated',
+      handleConfigUpdate,
+    );
+
+    return () => {
+      window.removeEventListener(
+        promotionService.updatedEvent,
+        handlePromotionUpdate,
+      );
+
+      window.removeEventListener(
+        'store-config-updated',
+        handleConfigUpdate,
+      );
+    };
+  }, []);
+
+  const filteredProducts = useMemo(() => {
+    const query = search
+      .trim()
+      .toLowerCase();
+
+    return products.filter((product) => {
+      const haystack = `${product.name ?? ''} ${
+        product.description ?? ''
+      }`.toLowerCase();
+
+      return (
+        product.available &&
+        (
+          category === 'all' ||
+          product.categoryId === category
+        ) &&
+        haystack.includes(query)
+      );
+    });
+  }, [products, category, search]);
 
   const promotionProducts = useMemo(() => {
     if (!selectedPromotion) return [];
 
     return selectedPromotion.productIds
-      .map((id) => products.find((product) => product.id === id))
+      .map((id) =>
+        products.find(
+          (product) => product.id === id,
+        ),
+      )
       .filter(
-        (product): product is Product => Boolean(product?.available),
+        (product): product is Product =>
+          Boolean(product?.available),
       );
   }, [products, selectedPromotion]);
 
-  function openPromotion(promotion: Promotion) {
+  function openPromotion(
+    promotion: Promotion,
+  ): void {
     if (!promotion.clickable) return;
+
     setSelectedPromotion(promotion);
   }
 
-  function selectPromotionProduct(product: Product, promotionalPrice: number) {
+  function selectPromotionProduct(
+    product: Product,
+    promotionalPrice: number,
+  ): void {
     setSelectedPromotion(null);
+
     setSelectedProduct({
-      product: { ...product, price: promotionalPrice },
+      product: {
+        ...product,
+        price: promotionalPrice,
+      },
       originalPrice: product.price,
     });
   }
 
   return (
     <div>
-      <section className="relative h-52 overflow-hidden sm:h-64">
-        <img
-          src={config.coverUrl}
-          alt={config.storeName}
-          className="h-full w-full object-cover"
-        />
+      <section className="relative h-52 overflow-hidden bg-slate-900 sm:h-64">
+        {config.coverUrl ? (
+          <img
+            src={config.coverUrl}
+            alt={config.storeName || 'Capa da loja'}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="h-full w-full bg-slate-800" />
+        )}
+
         <div className="absolute inset-0 bg-black/50" />
+
         <div className="absolute inset-0 mx-auto flex max-w-6xl flex-col justify-end px-4 pb-6 text-white">
           <span
             className={`mb-2 w-fit rounded-full px-3 py-1 text-sm ${
-              config.isOpen ? 'bg-green-600' : 'bg-red-600'
+              config.isOpen
+                ? 'bg-green-600'
+                : 'bg-red-600'
             }`}
           >
-            {config.isOpen ? 'Aberto agora' : 'Fechado'}
+            {config.isOpen
+              ? 'Aberto agora'
+              : 'Fechado'}
           </span>
-          <h1 className="text-3xl font-black">{config.storeName}</h1>
+
+          <h1 className="text-3xl font-black">
+            {config.storeName || 'Cardápio'}
+          </h1>
+
           <p>{config.description}</p>
-          <div className="mt-2 flex gap-4 text-sm">
-            <span className="flex gap-1">
+
+          <div className="mt-2 flex flex-wrap gap-4 text-sm">
+            <span className="flex items-center gap-1">
               <Clock size={18} />
-              {config.estimatedTime}
+              {config.openingHours ||
+                'Horário não informado'}
             </span>
-            <span className="flex gap-1">
+
+            <span className="flex items-center gap-1">
               <Truck size={18} />
               {formatCurrency(config.deliveryFee)}
             </span>
@@ -101,21 +310,41 @@ export function HomePage() {
         {promotions.length > 0 && (
           <section className="mb-7">
             <div className="mb-3 flex items-center gap-2">
-              <Sparkles style={{ color: 'var(--primary)' }} />
-              <h2 className="text-2xl font-black">Promoções e destaques</h2>
+              <Sparkles
+                style={{
+                  color: 'var(--primary)',
+                }}
+              />
+
+              <h2 className="text-2xl font-black">
+                Promoções e destaques
+              </h2>
             </div>
 
             <div className="flex snap-x gap-4 overflow-x-auto pb-3">
               {promotions.map((promotion) => (
                 <article
                   key={promotion.id}
-                  role={promotion.clickable ? 'button' : undefined}
-                  tabIndex={promotion.clickable ? 0 : undefined}
-                  onClick={() => openPromotion(promotion)}
+                  role={
+                    promotion.clickable
+                      ? 'button'
+                      : undefined
+                  }
+                  tabIndex={
+                    promotion.clickable
+                      ? 0
+                      : undefined
+                  }
+                  onClick={() =>
+                    openPromotion(promotion)
+                  }
                   onKeyDown={(event) => {
                     if (
                       promotion.clickable &&
-                      (event.key === 'Enter' || event.key === ' ')
+                      (
+                        event.key === 'Enter' ||
+                        event.key === ' '
+                      )
                     ) {
                       openPromotion(promotion);
                     }
@@ -131,12 +360,13 @@ export function HomePage() {
                     alt={promotion.title}
                     className="h-48 w-full object-cover opacity-60"
                   />
+
                   <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
 
                   {promotion.clickable && (
                     <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-900 shadow-md">
                       <MousePointerClick size={14} />
-                      Clique para adicionar ao carrinho!
+                      Ver oferta
                     </span>
                   )}
 
@@ -144,9 +374,11 @@ export function HomePage() {
                     <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold backdrop-blur">
                       {promotion.badge}
                     </span>
+
                     <h3 className="mt-2 text-2xl font-black">
                       {promotion.title}
                     </h3>
+
                     <p className="mt-1 text-sm text-white/85">
                       {promotion.description}
                     </p>
@@ -159,9 +391,12 @@ export function HomePage() {
 
         <div className="relative">
           <Search className="absolute left-4 top-3.5 text-slate-400" />
+
           <input
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
             placeholder="Buscar no cardápio"
             className="w-full rounded-2xl border py-3 pl-12 pr-4"
           />
@@ -169,14 +404,20 @@ export function HomePage() {
 
         <div className="my-5 flex gap-2 overflow-x-auto pb-2">
           <button
+            type="button"
             onClick={() => setCategory('all')}
             style={
               category === 'all'
-                ? { backgroundColor: 'var(--primary)' }
-                : {}
+                ? {
+                    backgroundColor:
+                      'var(--primary)',
+                  }
+                : undefined
             }
             className={`whitespace-nowrap rounded-full px-4 py-2 ${
-              category === 'all' ? 'text-white' : 'bg-slate-100'
+              category === 'all'
+                ? 'text-white'
+                : 'bg-slate-100'
             }`}
           >
             Todos
@@ -185,14 +426,22 @@ export function HomePage() {
           {categories.map((item) => (
             <button
               key={item.id}
-              onClick={() => setCategory(item.id)}
+              type="button"
+              onClick={() =>
+                setCategory(item.id)
+              }
               style={
                 category === item.id
-                  ? { backgroundColor: 'var(--primary)' }
-                  : {}
+                  ? {
+                      backgroundColor:
+                        'var(--primary)',
+                    }
+                  : undefined
               }
               className={`whitespace-nowrap rounded-full px-4 py-2 ${
-                category === item.id ? 'text-white' : 'bg-slate-100'
+                category === item.id
+                  ? 'text-white'
+                  : 'bg-slate-100'
               }`}
             >
               {item.name}
@@ -202,7 +451,11 @@ export function HomePage() {
 
         <div className="grid gap-3 md:grid-cols-2">
           {filteredProducts.map((product) => (
-            <ProductCard key={product.id} product={product} />
+            <ProductCard
+              key={product.id}
+              product={product}
+              promotions={promotions}
+            />
           ))}
         </div>
 
@@ -217,16 +470,24 @@ export function HomePage() {
         <PromotionModal
           promotion={selectedPromotion}
           products={promotionProducts}
-          onClose={() => setSelectedPromotion(null)}
-          onSelectProduct={selectPromotionProduct}
+          onClose={() =>
+            setSelectedPromotion(null)
+          }
+          onSelectProduct={
+            selectPromotionProduct
+          }
         />
       )}
 
       {selectedProduct && (
         <ProductModal
           product={selectedProduct.product}
-          originalPrice={selectedProduct.originalPrice}
-          onClose={() => setSelectedProduct(null)}
+          originalPrice={
+            selectedProduct.originalPrice
+          }
+          onClose={() =>
+            setSelectedProduct(null)
+          }
         />
       )}
     </div>

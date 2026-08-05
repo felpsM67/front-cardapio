@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
-import type { Product } from '../../models';
+import type { Product, Promotion } from '../../models';
 import { formatCurrency } from '../../utils/format';
-import { promotionService } from '../../services/promotionService';
 import { ProductModal } from './ProductModal';
 
 interface ProductCardProps {
   product: Product;
+  promotions?: Promotion[];
 }
 
 function isPromotionCurrentlyValid(
@@ -13,47 +13,74 @@ function isPromotionCurrentlyValid(
   endsAt?: string,
 ): boolean {
   const now = Date.now();
-  const startsAtTime = startsAt ? new Date(startsAt).getTime() : null;
-  const endsAtTime = endsAt ? new Date(endsAt).getTime() : null;
 
-  if (startsAtTime !== null && !Number.isNaN(startsAtTime) && now < startsAtTime) {
+  const startsAtTime = startsAt
+    ? new Date(startsAt).getTime()
+    : null;
+
+  const endsAtTime = endsAt
+    ? new Date(endsAt).getTime()
+    : null;
+
+  if (
+    startsAtTime !== null &&
+    !Number.isNaN(startsAtTime) &&
+    now < startsAtTime
+  ) {
     return false;
   }
 
-  if (endsAtTime !== null && !Number.isNaN(endsAtTime) && now > endsAtTime) {
+  if (
+    endsAtTime !== null &&
+    !Number.isNaN(endsAtTime) &&
+    now > endsAtTime
+  ) {
     return false;
   }
 
   return true;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({
+  product,
+  promotions = [],
+}: ProductCardProps) {
   const [open, setOpen] = useState(false);
 
   const promotionalPrice = useMemo(() => {
-    const promotions = promotionService.getAll();
-
     const promotion = promotions.find((item) => {
-      const price = item.promotionalPrices?.[product.id];
+      const price =
+        item.promotionalPrices?.[product.id];
 
       return (
         item.active &&
         item.clickable &&
         item.productIds.includes(product.id) &&
-        isPromotionCurrentlyValid(item.startsAt, item.endsAt) &&
+        isPromotionCurrentlyValid(
+          item.startsAt,
+          item.endsAt,
+        ) &&
         typeof price === 'number' &&
         price > 0 &&
         price < product.price
       );
     });
 
-    return promotion?.promotionalPrices[product.id];
-  }, [product.id, product.price]);
+    return promotion?.promotionalPrices[
+      product.id
+    ];
+  }, [promotions, product.id, product.price]);
 
-  const hasPromotion = promotionalPrice !== undefined;
-  const displayedProduct: Product = hasPromotion
-    ? { ...product, price: promotionalPrice }
-    : product;
+  const hasPromotion =
+    promotionalPrice !== undefined;
+
+  const displayedProduct: Product =
+    hasPromotion
+      ? {
+          ...product,
+          price: promotionalPrice,
+        }
+      : product;
 
   return (
     <>
@@ -70,6 +97,7 @@ export function ProductCard({ product }: ProductCardProps) {
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-bold">{product.name}</h3>
+
             {hasPromotion && (
               <span className="shrink-0 rounded-full bg-green-100 px-2 py-1 text-[11px] font-black text-green-700">
                 Oferta
@@ -99,7 +127,9 @@ export function ProductCard({ product }: ProductCardProps) {
 
             <button
               type="button"
-              style={{ backgroundColor: 'var(--primary)' }}
+              style={{
+                backgroundColor: 'var(--primary)',
+              }}
               className="rounded-lg px-3 py-2 text-sm font-semibold text-white"
             >
               Adicionar
@@ -111,7 +141,11 @@ export function ProductCard({ product }: ProductCardProps) {
       {open && (
         <ProductModal
           product={displayedProduct}
-          originalPrice={hasPromotion ? product.price : undefined}
+          originalPrice={
+            hasPromotion
+              ? product.price
+              : undefined
+          }
           onClose={() => setOpen(false)}
         />
       )}
