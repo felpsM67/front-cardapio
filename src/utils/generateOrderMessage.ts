@@ -1,2 +1,125 @@
-import type {Order} from '../models';import {formatCurrency} from './format';import {configService} from '../services/configService';export function generateOrderMessage(order:Order){const c=configService.get();const a=order.address;const items=order.items.map(i=>`${i.quantity}x ${i.product.name} — ${formatCurrency(i.unitPrice*i.quantity)}${i.selectedOptions.length?`\nAdicionais: ${i.selectedOptions.map(x=>`${x.quantity ?? 1}x ${x.name}`).join(', ')}`:''}${i.notes?`\nObservação: ${i.notes}`:''}`).join('\n\n');let payment=order.payment.method==='pix'?`Pix\nChave Pix: ${c.pixKey}`:order.payment.method==='cash'?`Dinheiro${order.payment.needsChange?`\nTroco para: ${formatCurrency(order.payment.changeFor||0)}\nTroco estimado: ${formatCurrency((order.payment.changeFor||0)-order.total)}`:'\nSem troco'}`:`Cartão de ${order.payment.method==='credit'?'crédito':'débito'} na entrega`;return `NOVO PEDIDO #${order.id}\n\nCliente: ${order.customer.name}\nTelefone: ${order.customer.phone}\n\nENDEREÇO\n${a.street}, ${a.number}\nBairro ${a.district}\n${a.city} - ${a.state}${a.complement?`\nComplemento: ${a.complement}`:''}${a.reference?`\nReferência: ${a.reference}`:''}\n\nITENS\n${items}\n\nSubtotal: ${formatCurrency(order.subtotal)}\nTaxa de entrega: ${formatCurrency(order.deliveryFee)}\nTotal: ${formatCurrency(order.total)}\n\nPAGAMENTO\n${payment}`}
-export const generateWhatsAppUrl=(message:string,number=configService.get().whatsappNumber)=>`https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+import type { Order } from '../models';
+import { configService } from '../services/configService';
+import { formatCurrency } from './format';
+
+export async function generateOrderMessage(
+  order: Order,
+): Promise<string> {
+  const config =
+    await configService.get();
+
+  const address = order.address;
+
+  const items = order.items
+    .map((item) => {
+      const additions =
+        item.selectedOptions?.length
+          ? item.selectedOptions
+              .map((option) => {
+                const quantity =
+                  option.quantity ?? 1;
+
+                return `${quantity}x ${option.name}`;
+              })
+              .join(', ')
+          : '';
+
+      return [
+        `${item.quantity}x ${
+          item.product.name
+        } — ${formatCurrency(
+          item.unitPrice *
+            item.quantity,
+        )}`,
+        additions
+          ? `Adicionais: ${additions}`
+          : '',
+        item.notes
+          ? `Observação: ${item.notes}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+    })
+    .join('\n\n');
+
+  let payment: string;
+
+  if (order.payment.method === 'pix') {
+    payment = [
+      'Pix',
+      config.pixKey
+        ? `Chave Pix: ${config.pixKey}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  } else if (
+    order.payment.method === 'cash'
+  ) {
+    if (order.payment.needsChange) {
+      const changeFor =
+        Number(
+          order.payment.changeFor ?? 0,
+        );
+
+      payment = [
+        'Dinheiro',
+        `Troco para: ${formatCurrency(
+          changeFor,
+        )}`,
+        `Troco estimado: ${formatCurrency(
+          Math.max(
+            changeFor - order.total,
+            0,
+          ),
+        )}`,
+      ].join('\n');
+    } else {
+      payment = 'Dinheiro\nSem troco';
+    }
+  } else {
+    payment =
+      order.payment.method === 'credit'
+        ? 'Cartão de crédito na entrega'
+        : 'Cartão de débito na entrega';
+  }
+
+  return [
+    `NOVO PEDIDO #${order.id}`,
+    '',
+    `Cliente: ${order.customer.name}`,
+    `Telefone: ${order.customer.phone}`,
+    '',
+    'ENDEREÇO',
+    `${address.street}, ${address.number}`,
+    `Bairro: ${address.district}`,
+    `${address.city} - ${address.state}`,
+    address.complement
+      ? `Complemento: ${address.complement}`
+      : '',
+    address.reference
+      ? `Referência: ${address.reference}`
+      : '',
+    '',
+    'ITENS',
+    items,
+    '',
+    `Subtotal: ${formatCurrency(
+      order.subtotal,
+    )}`,
+    `Taxa de entrega: ${formatCurrency(
+      order.deliveryFee,
+    )}`,
+    `Total: ${formatCurrency(
+      order.total,
+    )}`,
+    '',
+    'PAGAMENTO',
+    payment,
+  ]
+    .filter(
+      (line) => line !== '',
+    )
+    .join('\n');
+}

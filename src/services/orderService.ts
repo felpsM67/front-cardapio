@@ -277,11 +277,17 @@ export const orderService = {
     replaceOrder(id, mapApiOrder(response, currentOrder));
   },
 
-  async setStatus(id: string, status: OrderStatus): Promise<void> {
-    const currentOrder = orders.find((order) => order.id === id);
+  async setStatus(
+    id: string,
+     status: OrderStatus
+    ): Promise<void> {
+    const currentOrder = orders.find(
+      (order) => order.id === id
+    );
 
     if (!currentOrder) {
       return;
+      throw new Error('Pedido não encontrado.');
     }
 
     const response = await apiClient.put<ApiOrder>(`/pedidos/${encodeURIComponent(id)}`, { status }, true);
