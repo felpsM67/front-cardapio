@@ -25,7 +25,7 @@ import { addonCatalogService } from '../../services/addonCatalogService';
 import { addonGroupService } from '../../services/addonGroupService';
 import { categoryService } from '../../services/categoryService';
 import { productService } from '../../services/productService';
-
+import { ImageUploadField } from '../../components/common/ImageUploadField';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Toggle } from '../../components/common/Toggle';
@@ -878,22 +878,13 @@ export function ProductsPage() {
                       })
                     }
                   />
-                  <label className="rounded-xl border p-3 sm:col-span-2">
-                    <span className="block text-sm font-semibold">
-                      Selecione uma imagem
-                    </span>
-
-                    <input
-                      className="mt-2 w-full text-sm"
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) =>
-                        uploadImage(
-                          event.target.files?.[0],
-                        )
-                      }
-                    />
-                  </label>
+                  <ImageUploadField
+                    value={form.imageUrl}
+                    onFile={uploadImage}
+                    onRemove={() => setForm((current) => ({ ...current, imageUrl: '' }))}
+                    title="Imagem do produto"
+                    description="Escolha uma foto atraente para aparecer no cardápio"
+                  />
 
                   {form.imageUrl && (
                     <img

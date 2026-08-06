@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { MapPin, Minus, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, LoaderCircle, MapPin, Minus, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency } from '../../utils/format';
@@ -11,6 +11,8 @@ import type { Address } from '../../models';
 import { STORAGE_KEYS } from '../../constants/storage';
 import { storageService } from '../../services/storageService';
 import { addressService } from '../../services/addressService';
+import { cepService } from '../../services/cepService';
+import { formatPhone, onlyDigits } from '../../utils/format';
 
 const blankAddress: Address = {
   id: 'checkout-address',
@@ -28,7 +30,7 @@ const blankAddress: Address = {
 
 export function CartPage() {
   const cart = useCart();
-  const { customer } = useAuth();
+  const { customer, setCustomer } = useAuth();
   const navigate = useNavigate();
   const [minimumOrder, setMinimumOrder] =
   useState<number | null>(null);
@@ -80,9 +82,6 @@ useEffect(() => {
   const amountMissing = minimumOrder
     ? Math.max(minimumOrder - cart.subtotal, 0)
     : 0;
-  const minimumProgress = minimumOrder
-    ? Math.min((cart.subtotal / minimumOrder) * 100, 100)
-    : 100;
   const minimumReached = !minimumOrder || amountMissing === 0;
 
   const [address, setAddress] = useState<Address>(() => {
@@ -96,6 +95,44 @@ useEffect(() => {
     return blankAddress;
   });
   const [editing, setEditing] = useState(() => !address.street);
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState('');
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneDraft, setPhoneDraft] = useState(() =>
+    customer?.phone ? formatPhone(customer.phone) : '',
+  );
+  const [phoneError, setPhoneError] = useState('');
+
+  useEffect(() => {
+    const digits = onlyDigits(address.cep);
+    if (!editing || digits.length !== 8) {
+      if (digits.length < 8) setCepError('');
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      setCepLoading(true);
+      setCepError('');
+      try {
+        const result = await cepService.find(digits);
+        setAddress((current) => ({
+          ...current,
+          cep: result.cep || current.cep,
+          street: result.logradouro || current.street,
+          complement: current.complement,
+          district: result.bairro || current.district,
+          city: result.localidade || current.city,
+          state: result.uf || current.state,
+        }));
+      } catch (error) {
+        setCepError(error instanceof Error ? error.message : 'Erro ao consultar CEP.');
+      } finally {
+        setCepLoading(false);
+      }
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [address.cep, editing]);
 
   function persistCheckoutAddress(nextAddress: Address) {
     if (
@@ -142,30 +179,89 @@ useEffect(() => {
       />
     );
   }
+  const currentCustomer = customer;
 
-  const set = (key: keyof Address, value: string | boolean) => {
-    setAddress((current) => ({ ...current, [key]: value } as Address));
+const set = (
+  key: keyof Address,
+  value: string | boolean,
+): void => {
+  setAddress((current) => ({
+    ...current,
+    [key]: value,
+  }) as Address);
+};
+
+function startPhoneEdit(): void {
+  setPhoneDraft(
+    formatPhone(currentCustomer.phone),
+  );
+
+  setPhoneError('');
+  setEditingPhone(true);
+}
+
+function cancelPhoneEdit(): void {
+  setPhoneDraft(
+    formatPhone(currentCustomer.phone),
+  );
+
+  setPhoneError('');
+  setEditingPhone(false);
+}
+
+function savePhoneEdit(): void {
+  const digits = onlyDigits(phoneDraft);
+
+  if (
+    digits.length < 10 ||
+    digits.length > 11
+  ) {
+    setPhoneError(
+      'Informe um telefone válido com DDD.',
+    );
+
+    return;
+  }
+
+  const updatedCustomer = {
+    ...currentCustomer,
+    phone: formatPhone(digits),
   };
 
-  function saveAddress() {
-    if (
-      !address.cep ||
-      !address.street ||
-      !address.number ||
-      !address.district ||
-      !address.city ||
-      !address.state
-    ) {
-      alert('Preencha CEP, rua, número, bairro, cidade e estado.');
-      return;
-    }
+  storageService.set(
+    STORAGE_KEYS.CUSTOMER,
+    updatedCustomer,
+  );
 
-    persistCheckoutAddress(address);
-    if (customer) {
-      addressService.saveLast(customer.phone, address);
-    }
-    setEditing(false);
+  setCustomer(updatedCustomer);
+  setPhoneDraft(updatedCustomer.phone);
+  setPhoneError('');
+  setEditingPhone(false);
+}
+function saveAddress(): void {
+  if (
+    !address.cep ||
+    !address.street ||
+    !address.number ||
+    !address.district ||
+    !address.city ||
+    !address.state
+  ) {
+    alert(
+      'Preencha CEP, rua, número, bairro, cidade e estado.',
+    );
+    return;
   }
+
+  persistCheckoutAddress(address);
+
+  addressService.saveLast(
+    currentCustomer.phone,
+    address,
+  );
+
+  setEditing(false);
+}
 
   function next() {
     if (!minimumReached) {
@@ -186,13 +282,114 @@ useEffect(() => {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <p className="text-sm font-bold uppercase tracking-wide text-slate-400">
-        Etapa 2 de 3
-      </p>
-      <h1 className="mt-2 text-3xl font-black">Carrinho</h1>
-      <p className="mt-2 text-sm text-slate-500">
-        Pedido de <strong>{customer.name}</strong> · {customer.phone}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold uppercase tracking-wide text-slate-400">
+            Etapa 2 de 3
+          </p>
+          <h1 className="mt-2 text-3xl font-black">Carrinho</h1>
+        </div>
+
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-bold shadow-sm transition hover:bg-slate-50"
+          style={{ color: 'var(--primary)', borderColor: 'color-mix(in srgb, var(--primary) 35%, white)' }}
+        >
+          <ArrowLeft size={17} />
+          Sair do carrinho
+        </Link>
+      </div>
+      <div className="mt-2 rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              Dados do cliente
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              Pedido de <strong>{customer.name}</strong>
+            </p>
+          </div>
+
+          {!editingPhone && (
+            <button
+              type="button"
+              onClick={startPhoneEdit}
+              className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-sm font-bold hover:bg-orange-50"
+              style={{ color: 'var(--primary)' }}
+            >
+              <Pencil size={15} />
+              Corrigir telefone
+            </button>
+          )}
+        </div>
+
+        {editingPhone ? (
+          <div className="mt-3">
+            <Input
+              autoFocus
+              inputMode="numeric"
+              autoComplete="tel"
+              placeholder="(xx)xxxxx-xxxx"
+              value={phoneDraft}
+              onChange={(event) => {
+                setPhoneDraft(formatPhone(event.target.value));
+                setPhoneError('');
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  savePhoneEdit();
+                }
+
+                if (event.key === 'Escape') {
+                  cancelPhoneEdit();
+                }
+              }}
+              maxLength={15}
+            />
+
+            {phoneError && (
+              <p className="mt-1 text-sm font-semibold text-red-600">
+                {phoneError}
+              </p>
+            )}
+
+            <div className="mt-3 flex gap-2">
+              <Button type="button" onClick={savePhoneEdit}>
+                Salvar telefone
+              </Button>
+              <button
+                type="button"
+                onClick={cancelPhoneEdit}
+                className="rounded-xl border px-4 py-2 text-sm font-bold text-slate-600"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-2 text-base font-bold text-slate-800">
+            {formatPhone(customer.phone)}
+          </p>
+        )}
+      </div>
+
+      {minimumOrder && (
+        <div
+          className={`mt-3 flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-xs ${
+            minimumReached
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border-amber-200 bg-amber-50 text-amber-800'
+          }`}
+        >
+          <span>Pedido mínimo: {formatCurrency(minimumOrder)}</span>
+          <strong>
+            {minimumReached
+              ? 'Mínimo atingido'
+              : `Faltam ${formatCurrency(amountMissing)}`}
+          </strong>
+        </div>
+      )}
 
       <section className="mt-6 rounded-2xl border bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
@@ -230,11 +427,25 @@ useEffect(() => {
               <option>Apartamento</option>
               <option>Trabalho</option>
             </select>
-            <Input
-              placeholder="CEP *"
-              value={address.cep}
-              onChange={(event) => set('cep', event.target.value)}
-            />
+            <div>
+              <div className="relative">
+                <Input
+                  placeholder="CEP *"
+                  inputMode="numeric"
+                  maxLength={9}
+                  value={address.cep}
+                  onChange={(event) => {
+                    const digits = onlyDigits(event.target.value).slice(0, 8);
+                    const formatted = digits.replace(/(\d{5})(\d)/, '$1-$2');
+                    set('cep', formatted);
+                  }}
+                  className="pr-11"
+                />
+                {cepLoading && <LoaderCircle className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-orange-500" size={20} />}
+              </div>
+              {cepError && <small className="mt-1 block font-semibold text-red-600">{cepError}</small>}
+              {!cepError && address.street && <small className="mt-1 block font-semibold text-emerald-600">Endereço preenchido pelo CEP</small>}
+            </div>
             <Input
               className="sm:col-span-2"
               placeholder="Rua *"
@@ -242,12 +453,15 @@ useEffect(() => {
               onChange={(event) => set('street', event.target.value)}
             />
             <Input
-              placeholder="Número *"
+              placeholder="Número da casa *"
+              inputMode="numeric"
               value={address.number}
-              onChange={(event) => set('number', event.target.value)}
+              onChange={(event) =>
+                set('number', onlyDigits(event.target.value).slice(0, 10))
+              }
             />
             <Input
-              placeholder="Complemento"
+              placeholder="Complemento (opcional)"
               value={address.complement ?? ''}
               onChange={(event) => set('complement', event.target.value)}
             />
@@ -357,45 +571,6 @@ useEffect(() => {
         ))}
       </div>
 
-      {minimumOrder && (
-        <section className="mt-6 rounded-2xl border bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="font-black">Pedido mínimo</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                {minimumReached
-                  ? 'Valor mínimo atingido. Você já pode continuar.'
-                  : `Adicione mais ${formatCurrency(amountMissing)} ao carrinho para continuar.`}
-              </p>
-            </div>
-            <span
-              className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
-                minimumReached
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-amber-100 text-amber-700'
-              }`}
-            >
-              {formatCurrency(cart.subtotal)} de {formatCurrency(minimumOrder)}
-            </span>
-          </div>
-
-          <div
-            className="mt-4 h-3 overflow-hidden rounded-full bg-slate-200"
-            role="progressbar"
-            aria-label="Progresso do pedido mínimo"
-            aria-valuemin={0}
-            aria-valuemax={minimumOrder}
-            aria-valuenow={Math.min(cart.subtotal, minimumOrder)}
-          >
-            <div
-              className={`h-full rounded-full transition-all ${
-                minimumReached ? 'bg-emerald-500' : 'bg-amber-500'
-              }`}
-              style={{ width: `${minimumProgress}%` }}
-            />
-          </div>
-        </section>
-      )}
 
       <div className="mt-6 rounded-2xl bg-slate-50 p-5">
         <div className="flex justify-between">

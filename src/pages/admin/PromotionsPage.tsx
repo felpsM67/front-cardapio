@@ -19,6 +19,7 @@ import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { Toggle } from '../../components/common/Toggle';
 import { formatCurrency } from '../../utils/format';
+import { ImageUploadField } from '../../components/common/ImageUploadField';
 
 const blankPromotion = (): Omit<Promotion, 'id'> => ({
   title: '',
@@ -455,27 +456,13 @@ export function PromotionsPage() {
                 }
               />
 
-              <Input
-                className="sm:col-span-2"
-                placeholder="URL da imagem"
+              <ImageUploadField
                 value={form.imageUrl}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    imageUrl: event.target.value,
-                  })
-                }
-              />
-
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(event) =>
-                  uploadImage(
-                    event.target.files?.[0],
-                  )
-                }
-                className="rounded-xl border p-3 sm:col-span-2"
+                onFile={uploadImage}
+                onRemove={() => setForm({ ...form, imageUrl: '' })}
+                title="Banner da promoção"
+                description="Use uma imagem horizontal para destacar a oferta"
+                previewClassName="aspect-[16/6]"
               />
 
               {form.imageUrl && (
