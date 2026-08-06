@@ -405,9 +405,8 @@ export function EmployeesPage() {
                 <Input
                   type="tel"
                   inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={11}
-                  placeholder="67999999999"
+                          maxLength={11}
+                  placeholder="(xx)xxxxx-xxxx"
                   value={form.phone}
                   onChange={(event) =>
                     setForm({

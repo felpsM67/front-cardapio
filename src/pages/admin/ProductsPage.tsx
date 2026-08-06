@@ -25,8 +25,9 @@ import { addonCatalogService } from '../../services/addonCatalogService';
 import { addonGroupService } from '../../services/addonGroupService';
 import { categoryService } from '../../services/categoryService';
 import { productService } from '../../services/productService';
-import { ImageUploadField } from '../../components/common/ImageUploadField';
+
 import { Button } from '../../components/common/Button';
+import { ImageUploadField } from '../../components/common/ImageUploadField';
 import { Input } from '../../components/common/Input';
 import { Toggle } from '../../components/common/Toggle';
 import { formatCurrency } from '../../utils/format';
@@ -885,14 +886,6 @@ export function ProductsPage() {
                     title="Imagem do produto"
                     description="Escolha uma foto atraente para aparecer no cardápio"
                   />
-
-                  {form.imageUrl && (
-                    <img
-                      src={form.imageUrl}
-                      alt="Pré-visualização do produto"
-                      className="aspect-video w-full rounded-xl object-cover sm:col-span-2"
-                    />
-                  )}
 
                   <label className="flex items-center justify-between rounded-xl border p-3">
                     <span className="font-semibold">

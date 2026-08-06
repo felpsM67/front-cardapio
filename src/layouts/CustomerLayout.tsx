@@ -6,27 +6,22 @@ import {
 import { Outlet } from 'react-router-dom';
 
 import { Header } from '../components/layout/Header';
+import { CartAccessBar } from '../components/layout/CartAccessBar';
 import { configService } from '../services/configService';
 
 export function CustomerLayout() {
   const [primaryColor, setPrimaryColor] =
-    useState(() =>
-      configService.getCachedPrimaryColor(),
-    );
+    useState('#c05a07');
 
   useEffect(() => {
-    let active = true;
-
     async function loadConfig(): Promise<void> {
       try {
         const config =
           await configService.get();
 
-        if (active) {
-          setPrimaryColor(
-            config.primaryColor,
-          );
-        }
+        setPrimaryColor(
+          config.primaryColor || '#16a34a',
+        );
       } catch (error) {
         console.error(
           'Erro ao carregar configurações:',
@@ -36,10 +31,6 @@ export function CustomerLayout() {
     }
 
     void loadConfig();
-
-    return () => {
-      active = false;
-    };
   }, []);
 
   const style = {
@@ -49,7 +40,10 @@ export function CustomerLayout() {
   return (
     <div style={style}>
       <Header />
-      <Outlet />
+      <main className="pb-24">
+        <Outlet />
+      </main>
+      <CartAccessBar />
     </div>
   );
 }

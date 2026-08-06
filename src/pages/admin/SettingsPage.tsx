@@ -15,6 +15,7 @@ import { configService } from '../../services/configService';
 import { onlyDigits } from '../../utils/format';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { ImageUploadField } from '../../components/common/ImageUploadField';
 import { Toggle } from '../../components/common/Toggle';
 
 type SettingsTab = 'store' | 'share';
@@ -372,48 +373,25 @@ export function SettingsPage() {
             className="min-h-28 rounded-xl border p-3 sm:col-span-2"
           />
 
-          <label className="sm:col-span-2 cursor-pointer">
-  <input
-    type="file"
-    accept="image/*"
-    className="hidden"
-    onChange={(event) => {
-      const file = event.target.files?.[0];
-
-      if (!file) return;
-
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        set('coverUrl', String(reader.result));
-      };
-
-      reader.readAsDataURL(file);
-    }}
-  />
-
-  <span
-    className="inline-flex rounded-xl px-4 py-3 font-bold text-white"
-    style={{ backgroundColor: 'var(--primary)' }}
-  >
-    Selecionar imagem de capa
-  </span>
-</label>
-
-          {data.coverUrl && (
-            <img
-              src={data.coverUrl}
-              alt="Pré-visualização da capa"
-              className="aspect-[16/5] w-full rounded-xl object-cover sm:col-span-2"
-            />
-          )}
+          <ImageUploadField
+            value={data.coverUrl}
+            onFile={(file) => {
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = () => set('coverUrl', String(reader.result));
+              reader.readAsDataURL(file);
+            }}
+            onRemove={() => set('coverUrl', '')}
+            title="Imagem de capa da loja"
+            description="Recomendado: imagem horizontal em boa resolução"
+            previewClassName="aspect-[16/5]"
+          />
 
           <Input
             type="tel"
             inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={15}
-            placeholder="WhatsApp da loja"
+              maxLength={15}
+            placeholder="(xx)xxxxx-xxxx"
             value={data.whatsappNumber}
             onChange={(event) =>
               set(

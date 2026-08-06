@@ -1,10 +1,11 @@
-  import { STORAGE_KEYS } from '../constants/storage';
+import { STORAGE_KEYS } from '../constants/storage';
   import { storageService } from '../services/storageService';
 
   const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api').replace(/\/$/, '');
 
   interface AdminSession {
     token?: string;
+    isMock?: boolean;
   }
 
   export class ApiError extends Error {
@@ -19,7 +20,11 @@
   }
 
   function getToken(): string | undefined {
-    return storageService.get<AdminSession | null>(STORAGE_KEYS.ADMIN_SESSION, null)?.token;
+    const session = storageService.get<AdminSession | null>(
+      STORAGE_KEYS.ADMIN_SESSION,
+      null,
+    );
+    return session?.isMock ? undefined : session?.token;
   }
 
   function getErrorMessage(body: unknown, fallback: string): string {

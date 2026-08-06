@@ -17,9 +17,9 @@ import { promotionService } from '../../services/promotionService';
 import { productService } from '../../services/productService';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
+import { ImageUploadField } from '../../components/common/ImageUploadField';
 import { Toggle } from '../../components/common/Toggle';
 import { formatCurrency } from '../../utils/format';
-import { ImageUploadField } from '../../components/common/ImageUploadField';
 
 const blankPromotion = (): Omit<Promotion, 'id'> => ({
   title: '',
@@ -456,6 +456,18 @@ export function PromotionsPage() {
                 }
               />
 
+              <Input
+                className="sm:col-span-2"
+                placeholder="URL da imagem"
+                value={form.imageUrl}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    imageUrl: event.target.value,
+                  })
+                }
+              />
+
               <ImageUploadField
                 value={form.imageUrl}
                 onFile={uploadImage}
@@ -464,14 +476,6 @@ export function PromotionsPage() {
                 description="Use uma imagem horizontal para destacar a oferta"
                 previewClassName="aspect-[16/6]"
               />
-
-              {form.imageUrl && (
-                <img
-                  src={form.imageUrl}
-                  alt="Prévia"
-                  className="aspect-[16/6] w-full rounded-xl object-cover sm:col-span-2"
-                />
-              )}
 
               <Input
                 type="number"

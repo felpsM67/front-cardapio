@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, ShieldCheck } from 'lucide-react';
+import { ShoppingBag } from 'lucide-react';
 
 import { useCart } from '../../contexts/CartContext';
 import { configService } from '../../services/configService';
@@ -61,14 +61,6 @@ export function Header(): React.JSX.Element {
         </Link>
 
         <div className="flex items-center gap-2">
-          <Link
-            to="/admin/login"
-            title="Área administrativa"
-            className="rounded-full p-2 hover:bg-slate-100"
-          >
-            <ShieldCheck />
-          </Link>
-
           <Link
             to="/carrinho"
             aria-label={`Abrir sacola com ${count} item(ns)`}
