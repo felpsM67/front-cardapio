@@ -2,16 +2,19 @@ import { useEffect, useState } from 'react';
 import {
   CheckCircle2,
   ChefHat,
+  Printer, // NOVO
   Truck,
   UtensilsCrossed,
 } from 'lucide-react';
-import type { OrderStatus } from '../../models';
+import type { Order, OrderStatus } from '../../models'; // NOVO: import Order
 import { orderService } from '../../services/orderService';
 import { formatCurrency } from '../../utils/format';
 import {
   orderStatusClass,
   orderStatusLabel,
 } from '../../utils/orderStatus';
+import { Receipt } from '../../components/common/Receipt';
+import '../../styles/receipt-print.css'; // NOVO
 
 const actions: {
   status: OrderStatus;
@@ -38,9 +41,21 @@ const actions: {
 export function CashierPage() {
   const [, refresh] = useState(0);
 
+  // NOVO: guarda qual pedido deve ser impresso agora
+  const [orderToPrint, setOrderToPrint] = useState<Order | null>(null);
+
   useEffect(() => {
     return orderService.subscribe(() => refresh((value) => value + 1));
   }, []);
+
+  // NOVO: assim que o pedido a imprimir é definido, dispara o print
+  // e depois limpa, pra não ficar "preso" numa notinha antiga
+  useEffect(() => {
+    if (orderToPrint) {
+      window.print();
+      setOrderToPrint(null);
+    }
+  }, [orderToPrint]);
 
   const orders = orderService
     .getAll()
@@ -146,6 +161,15 @@ export function CashierPage() {
                 );
               })}
 
+              {/* NOVO: botão de imprimir */}
+              <button
+                onClick={() => setOrderToPrint(order)}
+                className="flex items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold transition hover:-translate-y-0.5"
+              >
+                <Printer size={16} />
+                Imprimir
+              </button>
+
               <button
                 onClick={() => cancel(order.id)}
                 className="ml-auto rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-600"
@@ -162,6 +186,9 @@ export function CashierPage() {
           </div>
         )}
       </div>
+
+      {/* NOVO: fica invisível na tela; só aparece em modo impressão */}
+      {orderToPrint && <Receipt order={orderToPrint} />}
     </div>
   );
 }

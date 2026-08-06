@@ -1,0 +1,73 @@
+.receipt {
+  display: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .receipt,
+  .receipt * {
+    visibility: visible;
+  }
+
+  .receipt {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  /* Troque para 58mm se a impressora do lojista for menor */
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  .receipt {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 4mm;
+    color: #000;
+  }
+
+  .receipt-divider {
+    border-top: 1px dashed #000;
+    margin: 6px 0;
+  }
+
+  .receipt-header {
+    text-align: center;
+  }
+
+  .receipt-item {
+    margin-bottom: 6px;
+  }
+
+  .receipt-item-row {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .receipt-item-option,
+  .receipt-item-note {
+    padding-left: 10px;
+    font-size: 11px;
+  }
+
+  .receipt-total {
+    font-size: 14px;
+  }
+
+  .receipt-payment {
+    margin-top: 6px;
+  }
+
+  .receipt-footer {
+    text-align: center;
+    margin-top: 10px;
+  }
+}
