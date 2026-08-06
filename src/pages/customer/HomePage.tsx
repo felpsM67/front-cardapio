@@ -3,6 +3,7 @@ import {
   useMemo,
   useState,
 } from 'react';
+
 import {
   Clock,
   MousePointerClick,
@@ -17,14 +18,15 @@ import type {
   StoreConfig,
 } from '../../models';
 
-import { productService } from '../../services/productService';
 import { categoryService } from '../../services/categoryService';
 import { configService } from '../../services/configService';
+import { productService } from '../../services/productService';
 import { promotionService } from '../../services/promotionService';
 
 import { ProductCard } from '../../components/products/ProductCard';
 import { ProductModal } from '../../components/products/ProductModal';
 import { PromotionModal } from '../../components/products/PromotionModal';
+
 import { formatCurrency } from '../../utils/format';
 
 interface CategoryItem {
@@ -49,39 +51,59 @@ const initialConfig: StoreConfig = {
   coverUrl: '',
 };
 
-function isPromotionCurrentlyValid(
-  promotion: Promotion,
-): boolean {
-  const now = Date.now();
+function HomeSkeleton(): React.JSX.Element {
+  return (
+    <div className="animate-pulse">
+      <div className="h-52 bg-slate-300 sm:h-64" />
 
-  const startsAt = promotion.startsAt
-    ? new Date(promotion.startsAt).getTime()
-    : null;
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="mb-7">
+          <div className="mb-3 h-8 w-64 rounded-lg bg-slate-200" />
 
-  const endsAt = promotion.endsAt
-    ? new Date(promotion.endsAt).getTime()
-    : null;
+          <div className="flex gap-4 overflow-hidden">
+            <div className="h-48 min-w-[85%] rounded-2xl bg-slate-200 sm:min-w-[460px]" />
 
-  if (
-    startsAt !== null &&
-    !Number.isNaN(startsAt) &&
-    now < startsAt
-  ) {
-    return false;
-  }
+            <div className="hidden h-48 min-w-[460px] rounded-2xl bg-slate-200 sm:block" />
+          </div>
+        </div>
 
-  if (
-    endsAt !== null &&
-    !Number.isNaN(endsAt) &&
-    now > endsAt
-  ) {
-    return false;
-  }
+        <div className="h-12 w-full rounded-2xl bg-slate-200" />
 
-  return true;
+        <div className="my-5 flex gap-2 overflow-hidden">
+          <div className="h-10 w-24 shrink-0 rounded-full bg-slate-200" />
+          <div className="h-10 w-28 shrink-0 rounded-full bg-slate-200" />
+          <div className="h-10 w-24 shrink-0 rounded-full bg-slate-200" />
+          <div className="h-10 w-32 shrink-0 rounded-full bg-slate-200" />
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {Array.from({ length: 6 }).map(
+            (_, index) => (
+              <div
+                key={index}
+                className="overflow-hidden rounded-2xl border bg-white"
+              >
+                <div className="aspect-video bg-slate-200" />
+
+                <div className="space-y-3 p-4">
+                  <div className="h-5 w-2/3 rounded bg-slate-200" />
+
+                  <div className="h-4 w-full rounded bg-slate-200" />
+
+                  <div className="h-4 w-4/5 rounded bg-slate-200" />
+
+                  <div className="h-6 w-28 rounded bg-slate-200" />
+                </div>
+              </div>
+            ),
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-export function HomePage() {
+export function HomePage(): React.JSX.Element {
   const [config, setConfig] =
     useState<StoreConfig>(initialConfig);
 
@@ -94,21 +116,33 @@ export function HomePage() {
   const [promotions, setPromotions] =
     useState<Promotion[]>([]);
 
-  const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('all');
+  const [loading, setLoading] =
+    useState(true);
 
-  const [selectedPromotion, setSelectedPromotion] =
-    useState<Promotion | null>(null);
+  const [search, setSearch] =
+    useState('');
 
-  const [selectedProduct, setSelectedProduct] =
-    useState<{
-      product: Product;
-      originalPrice?: number;
-    } | null>(null);
+  const [category, setCategory] =
+    useState('all');
+
+  const [
+    selectedPromotion,
+    setSelectedPromotion,
+  ] = useState<Promotion | null>(null);
+
+  const [
+    selectedProduct,
+    setSelectedProduct,
+  ] = useState<{
+    product: Product;
+    originalPrice?: number;
+  } | null>(null);
 
   useEffect(() => {
     async function loadPage(): Promise<void> {
       try {
+        setLoading(true);
+
         const [
           loadedConfig,
           loadedProducts,
@@ -116,13 +150,22 @@ export function HomePage() {
           loadedPromotions,
         ] = await Promise.all([
           configService.get(),
-          Promise.resolve(productService.getAll()),
-          Promise.resolve(categoryService.getAll()),
+
+          Promise.resolve(
+            productService.getAll(),
+          ),
+
+          Promise.resolve(
+            categoryService.getAll(),
+          ),
+
           promotionService.getAll(),
         ]);
 
         setConfig(loadedConfig);
+
         setProducts(loadedProducts);
+
         setCategories(
           loadedCategories.filter(
             (item) => item.active,
@@ -130,15 +173,17 @@ export function HomePage() {
         );
 
         setPromotions(
-  loadedPromotions.filter(
-    (item) => item.active,
-  ),
-);
+          loadedPromotions.filter(
+            (item) => item.active,
+          ),
+        );
       } catch (error) {
         console.error(
           'Erro ao carregar a Home:',
           error,
         );
+      } finally {
+        setLoading(false);
       }
     }
 
@@ -148,10 +193,10 @@ export function HomePage() {
           await promotionService.getAll();
 
         setPromotions(
-  items.filter(
-    (item) => item.active,
-  ),
-);
+          items.filter(
+            (item) => item.active,
+          ),
+        );
       } catch (error) {
         console.error(
           'Erro ao atualizar promoções:',
@@ -164,7 +209,9 @@ export function HomePage() {
       void reloadPromotions();
     }
 
-    function handleConfigUpdate(event: Event): void {
+    function handleConfigUpdate(
+      event: Event,
+    ): void {
       const customEvent =
         event as CustomEvent<StoreConfig>;
 
@@ -201,43 +248,57 @@ export function HomePage() {
   const filteredProducts = useMemo(() => {
     const query = search
       .trim()
-      .toLowerCase();
+      .toLocaleLowerCase('pt-BR');
 
     return products.filter((product) => {
-      const haystack = `${product.name ?? ''} ${
-        product.description ?? ''
-      }`.toLowerCase();
+      const searchableContent = `
+        ${product.name ?? ''}
+        ${product.description ?? ''}
+      `.toLocaleLowerCase('pt-BR');
+
+      const belongsToSelectedCategory =
+        category === 'all' ||
+        product.categoryId === category;
 
       return (
         product.available &&
-        (
-          category === 'all' ||
-          product.categoryId === category
-        ) &&
-        haystack.includes(query)
+        belongsToSelectedCategory &&
+        searchableContent.includes(query)
       );
     });
-  }, [products, category, search]);
+  }, [
+    products,
+    category,
+    search,
+  ]);
 
   const promotionProducts = useMemo(() => {
-    if (!selectedPromotion) return [];
+    if (!selectedPromotion) {
+      return [];
+    }
 
     return selectedPromotion.productIds
-      .map((id) =>
+      .map((productId) =>
         products.find(
-          (product) => product.id === id,
+          (product) =>
+            product.id === productId,
         ),
       )
       .filter(
         (product): product is Product =>
           Boolean(product?.available),
       );
-  }, [products, selectedPromotion]);
+  }, [
+    products,
+    selectedPromotion,
+  ]);
 
   function openPromotion(
     promotion: Promotion,
   ): void {
-    if (!promotion.clickable) return;
+    if (!promotion.clickable) {
+      return;
+    }
 
     setSelectedPromotion(promotion);
   }
@@ -253,8 +314,13 @@ export function HomePage() {
         ...product,
         price: promotionalPrice,
       },
+
       originalPrice: product.price,
     });
+  }
+
+  if (loading) {
+    return <HomeSkeleton />;
   }
 
   return (
@@ -263,7 +329,10 @@ export function HomePage() {
         {config.coverUrl ? (
           <img
             src={config.coverUrl}
-            alt={config.storeName || 'Capa da loja'}
+            alt={
+              config.storeName ||
+              'Capa da loja'
+            }
             className="h-full w-full object-cover"
           />
         ) : (
@@ -286,7 +355,8 @@ export function HomePage() {
           </span>
 
           <h1 className="text-3xl font-black">
-            {config.storeName || 'Cardápio'}
+            {config.storeName ||
+              'Cardápio'}
           </h1>
 
           <p>{config.description}</p>
@@ -294,13 +364,17 @@ export function HomePage() {
           <div className="mt-2 flex flex-wrap gap-4 text-sm">
             <span className="flex items-center gap-1">
               <Clock size={18} />
+
               {config.openingHours ||
                 'Horário não informado'}
             </span>
 
             <span className="flex items-center gap-1">
               <Truck size={18} />
-              {formatCurrency(config.deliveryFee)}
+
+              {formatCurrency(
+                config.deliveryFee,
+              )}
             </span>
           </div>
         </div>
@@ -322,69 +396,85 @@ export function HomePage() {
             </div>
 
             <div className="flex snap-x gap-4 overflow-x-auto pb-3">
-              {promotions.map((promotion) => (
-                <article
-                  key={promotion.id}
-                  role={
-                    promotion.clickable
-                      ? 'button'
-                      : undefined
-                  }
-                  tabIndex={
-                    promotion.clickable
-                      ? 0
-                      : undefined
-                  }
-                  onClick={() =>
-                    openPromotion(promotion)
-                  }
-                  onKeyDown={(event) => {
-                    if (
-                      promotion.clickable &&
-                      (
-                        event.key === 'Enter' ||
-                        event.key === ' '
-                      )
-                    ) {
-                      openPromotion(promotion);
+              {promotions.map(
+                (promotion) => (
+                  <article
+                    key={promotion.id}
+                    role={
+                      promotion.clickable
+                        ? 'button'
+                        : undefined
                     }
-                  }}
-                  className={`relative min-w-[85%] snap-start overflow-hidden rounded-2xl bg-slate-900 text-white shadow-md sm:min-w-[460px] ${
-                    promotion.clickable
-                      ? 'cursor-pointer transition hover:-translate-y-0.5 hover:shadow-lg'
-                      : ''
-                  }`}
-                >
-                  <img
-                    src={promotion.imageUrl}
-                    alt={promotion.title}
-                    className="h-48 w-full object-cover opacity-60"
-                  />
+                    tabIndex={
+                      promotion.clickable
+                        ? 0
+                        : undefined
+                    }
+                    onClick={() =>
+                      openPromotion(
+                        promotion,
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (
+                        promotion.clickable &&
+                        (
+                          event.key ===
+                            'Enter' ||
+                          event.key === ' '
+                        )
+                      ) {
+                        event.preventDefault();
 
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                        openPromotion(
+                          promotion,
+                        );
+                      }
+                    }}
+                    className={`relative min-w-[85%] snap-start overflow-hidden rounded-2xl bg-slate-900 text-white shadow-md sm:min-w-[460px] ${
+                      promotion.clickable
+                        ? 'cursor-pointer transition hover:-translate-y-0.5 hover:shadow-lg'
+                        : ''
+                    }`}
+                  >
+                    <img
+                      src={
+                        promotion.imageUrl
+                      }
+                      alt={promotion.title}
+                      className="h-48 w-full object-cover opacity-60"
+                    />
 
-                  {promotion.clickable && (
-                    <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-900 shadow-md">
-                      <MousePointerClick size={14} />
-                      Ver oferta
-                    </span>
-                  )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
 
-                  <div className="absolute inset-x-0 bottom-0 p-5">
-                    <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold backdrop-blur">
-                      {promotion.badge}
-                    </span>
+                    {promotion.clickable && (
+                      <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-900 shadow-md">
+                        <MousePointerClick
+                          size={14}
+                        />
 
-                    <h3 className="mt-2 text-2xl font-black">
-                      {promotion.title}
-                    </h3>
+                        Ver oferta
+                      </span>
+                    )}
 
-                    <p className="mt-1 text-sm text-white/85">
-                      {promotion.description}
-                    </p>
-                  </div>
-                </article>
-              ))}
+                    <div className="absolute inset-x-0 bottom-0 p-5">
+                      <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold backdrop-blur">
+                        {promotion.badge}
+                      </span>
+
+                      <h3 className="mt-2 text-2xl font-black">
+                        {promotion.title}
+                      </h3>
+
+                      <p className="mt-1 text-sm text-white/85">
+                        {
+                          promotion.description
+                        }
+                      </p>
+                    </div>
+                  </article>
+                ),
+              )}
             </div>
           </section>
         )}
@@ -395,17 +485,21 @@ export function HomePage() {
           <input
             value={search}
             onChange={(event) =>
-              setSearch(event.target.value)
+              setSearch(
+                event.target.value,
+              )
             }
             placeholder="Buscar no cardápio"
-            className="w-full rounded-2xl border py-3 pl-12 pr-4"
+            className="w-full rounded-2xl border py-3 pl-12 pr-4 outline-none focus:ring-2"
           />
         </div>
 
         <div className="my-5 flex gap-2 overflow-x-auto pb-2">
           <button
             type="button"
-            onClick={() => setCategory('all')}
+            onClick={() =>
+              setCategory('all')
+            }
             style={
               category === 'all'
                 ? {
@@ -423,40 +517,48 @@ export function HomePage() {
             Todos
           </button>
 
-          {categories.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() =>
-                setCategory(item.id)
-              }
-              style={
-                category === item.id
-                  ? {
-                      backgroundColor:
-                        'var(--primary)',
-                    }
-                  : undefined
-              }
-              className={`whitespace-nowrap rounded-full px-4 py-2 ${
-                category === item.id
-                  ? 'text-white'
-                  : 'bg-slate-100'
-              }`}
-            >
-              {item.name}
-            </button>
-          ))}
+          {categories.map(
+            (categoryItem) => (
+              <button
+                key={categoryItem.id}
+                type="button"
+                onClick={() =>
+                  setCategory(
+                    categoryItem.id,
+                  )
+                }
+                style={
+                  category ===
+                  categoryItem.id
+                    ? {
+                        backgroundColor:
+                          'var(--primary)',
+                      }
+                    : undefined
+                }
+                className={`whitespace-nowrap rounded-full px-4 py-2 ${
+                  category ===
+                  categoryItem.id
+                    ? 'text-white'
+                    : 'bg-slate-100'
+                }`}
+              >
+                {categoryItem.name}
+              </button>
+            ),
+          )}
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
-          {filteredProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              promotions={promotions}
-            />
-          ))}
+          {filteredProducts.map(
+            (product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                promotions={promotions}
+              />
+            ),
+          )}
         </div>
 
         {!filteredProducts.length && (
@@ -481,7 +583,9 @@ export function HomePage() {
 
       {selectedProduct && (
         <ProductModal
-          product={selectedProduct.product}
+          product={
+            selectedProduct.product
+          }
           originalPrice={
             selectedProduct.originalPrice
           }

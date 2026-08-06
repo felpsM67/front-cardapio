@@ -2,7 +2,7 @@ import type { StoreConfig } from '../models';
 import { apiClient } from '../api/apiClient';
 
 const CONFIG_ENDPOINT = '/configuracoes';
-
+let configPromise: Promise<StoreConfig> | null = null;
 interface BackendStoreConfig {
   id: number;
   nomeLoja: string;
@@ -87,14 +87,24 @@ function applyPrimaryColor(primaryColor: string): void {
   );
 }
 
-async function get(): Promise<StoreConfig> {
-  const response =
-    await apiClient.get<BackendStoreConfig>(CONFIG_ENDPOINT);
+function get(forceReload = false): Promise<StoreConfig> {
+  if (!configPromise || forceReload) {
+    configPromise = apiClient
+      .get<BackendStoreConfig>(CONFIG_ENDPOINT)
+      .then((response) => {
+        const config = normalizeConfig(response);
 
-  const config = normalizeConfig(response);
-  applyPrimaryColor(config.primaryColor);
+        applyPrimaryColor(config.primaryColor);
 
-  return config;
+        return config;
+      })
+      .catch((error) => {
+        configPromise = null;
+        throw error;
+      });
+  }
+
+  return configPromise;
 }
 
 async function save(value: StoreConfig): Promise<StoreConfig> {
@@ -105,6 +115,7 @@ async function save(value: StoreConfig): Promise<StoreConfig> {
     );
 
   const config = normalizeConfig(response);
+  configPromise = Promise.resolve(config);
 
   applyPrimaryColor(config.primaryColor);
 
