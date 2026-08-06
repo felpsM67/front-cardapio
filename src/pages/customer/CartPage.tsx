@@ -296,7 +296,7 @@ function saveAddress(): void {
           style={{ color: 'var(--primary)', borderColor: 'color-mix(in srgb, var(--primary) 35%, white)' }}
         >
           <ArrowLeft size={17} />
-          Sair do carrinho
+          Continuar comprando
         </Link>
       </div>
       <div className="mt-2 rounded-2xl border bg-white p-4 shadow-sm">
