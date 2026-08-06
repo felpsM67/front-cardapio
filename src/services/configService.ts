@@ -3,6 +3,14 @@ import { apiClient } from '../api/apiClient';
 
 const CONFIG_ENDPOINT = '/configuracoes';
 let configPromise: Promise<StoreConfig> | null = null;
+const PRIMARY_COLOR_KEY = 'store-primary-color';
+const DEFAULT_PRIMARY_COLOR = '#ea580c';
+function getCachedPrimaryColor(): string {
+  return (
+    localStorage.getItem(PRIMARY_COLOR_KEY) ??
+    DEFAULT_PRIMARY_COLOR
+  );
+}
 interface BackendStoreConfig {
   id: number;
   nomeLoja: string;
@@ -78,15 +86,23 @@ function buildPayload(config: StoreConfig): StoreConfigPayload {
   };
 }
 
-function applyPrimaryColor(primaryColor: string): void {
-  if (!primaryColor) return;
+function applyPrimaryColor(
+  primaryColor: string,
+): void {
+  const color =
+    primaryColor?.trim() ||
+    DEFAULT_PRIMARY_COLOR;
+
+  localStorage.setItem(
+    PRIMARY_COLOR_KEY,
+    color,
+  );
 
   document.documentElement.style.setProperty(
     '--primary',
-    primaryColor,
+    color,
   );
 }
-
 function get(forceReload = false): Promise<StoreConfig> {
   if (!configPromise || forceReload) {
     configPromise = apiClient
@@ -135,4 +151,5 @@ export const configService = {
   get,
   save,
   applyPrimaryColor,
+  getCachedPrimaryColor,
 };
