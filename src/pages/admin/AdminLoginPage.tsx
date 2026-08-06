@@ -80,9 +80,7 @@ export function AdminLoginPage() {
             </button>
           </div>
 
-          <div className="mt-6 rounded-2xl bg-orange-50 p-4 text-center text-xs text-orange-800">
-            <strong>Acesso temporário:</strong> admin@talabi.site / talabi123
-          </div>
+        
         </form>
       </div>
     </main>
