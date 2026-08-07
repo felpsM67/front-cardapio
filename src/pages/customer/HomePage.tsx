@@ -77,26 +77,30 @@ function HomeSkeleton(): React.JSX.Element {
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
-          {Array.from({ length: 6 }).map(
-            (_, index) => (
-              <div
-                key={index}
-                className="overflow-hidden rounded-2xl border bg-white"
-              >
-                <div className="aspect-video bg-slate-200" />
+          {Array.from({
+            length: 6,
+          }).map((_, index) => (
+            <div
+              key={index}
+              className="flex gap-3 rounded-2xl border bg-white p-3"
+            >
+              <div className="h-28 w-28 shrink-0 rounded-xl bg-slate-200 sm:h-32 sm:w-32" />
 
-                <div className="space-y-3 p-4">
-                  <div className="h-5 w-2/3 rounded bg-slate-200" />
+              <div className="flex flex-1 flex-col">
+                <div className="h-5 w-2/3 rounded bg-slate-200" />
 
-                  <div className="h-4 w-full rounded bg-slate-200" />
+                <div className="mt-3 h-4 w-full rounded bg-slate-200" />
 
-                  <div className="h-4 w-4/5 rounded bg-slate-200" />
+                <div className="mt-2 h-4 w-4/5 rounded bg-slate-200" />
 
-                  <div className="h-6 w-28 rounded bg-slate-200" />
+                <div className="mt-auto flex items-end justify-between pt-4">
+                  <div className="h-6 w-24 rounded bg-slate-200" />
+
+                  <div className="h-9 w-24 rounded-lg bg-slate-200" />
                 </div>
               </div>
-            ),
-          )}
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -139,58 +143,16 @@ export function HomePage(): React.JSX.Element {
   } | null>(null);
 
   useEffect(() => {
-    async function loadPage(): Promise<void> {
-      try {
-        setLoading(true);
-
-        const [
-          loadedConfig,
-          loadedProducts,
-          loadedCategories,
-          loadedPromotions,
-        ] = await Promise.all([
-          configService.get(),
-
-          Promise.resolve(
-            productService.getAll(),
-          ),
-
-          Promise.resolve(
-            categoryService.getAll(),
-          ),
-
-          promotionService.getAll(),
-        ]);
-
-        setConfig(loadedConfig);
-
-        setProducts(loadedProducts);
-
-        setCategories(
-          loadedCategories.filter(
-            (item) => item.active,
-          ),
-        );
-
-        setPromotions(
-          loadedPromotions.filter(
-            (item) => item.active,
-          ),
-        );
-      } catch (error) {
-        console.error(
-          'Erro ao carregar a Home:',
-          error,
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
+    let active = true;
 
     async function reloadPromotions(): Promise<void> {
       try {
         const items =
           await promotionService.getAll();
+
+        if (!active) {
+          return;
+        }
 
         setPromotions(
           items.filter(
@@ -199,10 +161,65 @@ export function HomePage(): React.JSX.Element {
         );
       } catch (error) {
         console.error(
-          'Erro ao atualizar promoções:',
+          'Erro ao carregar promoções:',
           error,
         );
       }
+    }
+
+    async function loadPage(): Promise<void> {
+      setLoading(true);
+
+      try {
+        const [
+          loadedProducts,
+          loadedCategories,
+          loadedConfig,
+        ] = await Promise.all([
+          Promise.resolve(
+            productService.getAll(),
+          ),
+
+          Promise.resolve(
+            categoryService.getAll(),
+          ),
+
+          configService.get(),
+        ]);
+
+        if (!active) {
+          return;
+        }
+
+        setProducts(
+          loadedProducts,
+        );
+
+        setCategories(
+          loadedCategories.filter(
+            (item) => item.active,
+          ),
+        );
+
+        setConfig(
+          loadedConfig,
+        );
+      } catch (error) {
+        console.error(
+          'Erro ao carregar cardápio:',
+          error,
+        );
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+
+      /*
+       * Promoções são secundárias.
+       * Carregam depois sem segurar o skeleton.
+       */
+      void reloadPromotions();
     }
 
     function handlePromotionUpdate(): void {
@@ -215,8 +232,13 @@ export function HomePage(): React.JSX.Element {
       const customEvent =
         event as CustomEvent<StoreConfig>;
 
-      if (customEvent.detail) {
-        setConfig(customEvent.detail);
+      if (
+        active &&
+        customEvent.detail
+      ) {
+        setConfig(
+          customEvent.detail,
+        );
       }
     }
 
@@ -233,6 +255,8 @@ export function HomePage(): React.JSX.Element {
     );
 
     return () => {
+      active = false;
+
       window.removeEventListener(
         promotionService.updatedEvent,
         handlePromotionUpdate,
@@ -245,53 +269,69 @@ export function HomePage(): React.JSX.Element {
     };
   }, []);
 
-  const filteredProducts = useMemo(() => {
-    const query = search
-      .trim()
-      .toLocaleLowerCase('pt-BR');
+  const filteredProducts =
+    useMemo(() => {
+      const query = search
+        .trim()
+        .toLocaleLowerCase(
+          'pt-BR',
+        );
 
-    return products.filter((product) => {
-      const searchableContent = `
-        ${product.name ?? ''}
-        ${product.description ?? ''}
-      `.toLocaleLowerCase('pt-BR');
+      return products.filter(
+        (product) => {
+          const searchableContent = `
+            ${product.name ?? ''}
+            ${product.description ?? ''}
+          `.toLocaleLowerCase(
+            'pt-BR',
+          );
 
-      const belongsToSelectedCategory =
-        category === 'all' ||
-        product.categoryId === category;
+          const belongsToSelectedCategory =
+            category === 'all' ||
+            product.categoryId ===
+              category;
 
-      return (
-        product.available &&
-        belongsToSelectedCategory &&
-        searchableContent.includes(query)
+          return (
+            product.available &&
+            belongsToSelectedCategory &&
+            searchableContent.includes(
+              query,
+            )
+          );
+        },
       );
-    });
-  }, [
-    products,
-    category,
-    search,
-  ]);
+    }, [
+      products,
+      category,
+      search,
+    ]);
 
-  const promotionProducts = useMemo(() => {
-    if (!selectedPromotion) {
-      return [];
-    }
+  const promotionProducts =
+    useMemo(() => {
+      if (!selectedPromotion) {
+        return [];
+      }
 
-    return selectedPromotion.productIds
-      .map((productId) =>
-        products.find(
-          (product) =>
-            product.id === productId,
-        ),
-      )
-      .filter(
-        (product): product is Product =>
-          Boolean(product?.available),
-      );
-  }, [
-    products,
-    selectedPromotion,
-  ]);
+      return selectedPromotion.productIds
+        .map((productId) =>
+          products.find(
+            (product) =>
+              product.id ===
+              productId,
+          ),
+        )
+        .filter(
+          (
+            product,
+          ): product is Product =>
+            Boolean(
+              product?.available,
+            ),
+        );
+    }, [
+      products,
+      selectedPromotion,
+    ]);
 
   function openPromotion(
     promotion: Promotion,
@@ -300,7 +340,9 @@ export function HomePage(): React.JSX.Element {
       return;
     }
 
-    setSelectedPromotion(promotion);
+    setSelectedPromotion(
+      promotion,
+    );
   }
 
   function selectPromotionProduct(
@@ -312,10 +354,12 @@ export function HomePage(): React.JSX.Element {
     setSelectedProduct({
       product: {
         ...product,
-        price: promotionalPrice,
+        price:
+          promotionalPrice,
       },
 
-      originalPrice: product.price,
+      originalPrice:
+        product.price,
     });
   }
 
@@ -325,6 +369,8 @@ export function HomePage(): React.JSX.Element {
 
   return (
     <div>
+      {/* CAPA */}
+
       <section className="relative h-52 overflow-hidden bg-slate-900 sm:h-64">
         {config.coverUrl ? (
           <img
@@ -359,7 +405,9 @@ export function HomePage(): React.JSX.Element {
               'Cardápio'}
           </h1>
 
-          <p>{config.description}</p>
+          <p>
+            {config.description}
+          </p>
 
           <div className="mt-2 flex flex-wrap gap-4 text-sm">
             <span className="flex items-center gap-1">
@@ -381,12 +429,15 @@ export function HomePage(): React.JSX.Element {
       </section>
 
       <div className="mx-auto max-w-6xl px-4 py-6">
+        {/* PROMOÇÕES */}
+
         {promotions.length > 0 && (
           <section className="mb-7">
             <div className="mb-3 flex items-center gap-2">
               <Sparkles
                 style={{
-                  color: 'var(--primary)',
+                  color:
+                    'var(--primary)',
                 }}
               />
 
@@ -399,7 +450,9 @@ export function HomePage(): React.JSX.Element {
               {promotions.map(
                 (promotion) => (
                   <article
-                    key={promotion.id}
+                    key={
+                      promotion.id
+                    }
                     role={
                       promotion.clickable
                         ? 'button'
@@ -415,13 +468,16 @@ export function HomePage(): React.JSX.Element {
                         promotion,
                       )
                     }
-                    onKeyDown={(event) => {
+                    onKeyDown={(
+                      event,
+                    ) => {
                       if (
                         promotion.clickable &&
                         (
                           event.key ===
                             'Enter' ||
-                          event.key === ' '
+                          event.key ===
+                            ' '
                         )
                       ) {
                         event.preventDefault();
@@ -441,7 +497,10 @@ export function HomePage(): React.JSX.Element {
                       src={
                         promotion.imageUrl
                       }
-                      alt={promotion.title}
+                      alt={
+                        promotion.title
+                      }
+                      loading="lazy"
                       className="h-48 w-full object-cover opacity-60"
                     />
 
@@ -459,11 +518,15 @@ export function HomePage(): React.JSX.Element {
 
                     <div className="absolute inset-x-0 bottom-0 p-5">
                       <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold backdrop-blur">
-                        {promotion.badge}
+                        {
+                          promotion.badge
+                        }
                       </span>
 
                       <h3 className="mt-2 text-2xl font-black">
-                        {promotion.title}
+                        {
+                          promotion.title
+                        }
                       </h3>
 
                       <p className="mt-1 text-sm text-white/85">
@@ -478,6 +541,8 @@ export function HomePage(): React.JSX.Element {
             </div>
           </section>
         )}
+
+        {/* BUSCA */}
 
         <div className="relative">
           <Search className="absolute left-4 top-3.5 text-slate-400" />
@@ -494,11 +559,15 @@ export function HomePage(): React.JSX.Element {
           />
         </div>
 
+        {/* CATEGORIAS */}
+
         <div className="my-5 flex gap-2 overflow-x-auto pb-2">
           <button
             type="button"
             onClick={() =>
-              setCategory('all')
+              setCategory(
+                'all',
+              )
             }
             style={
               category === 'all'
@@ -518,9 +587,13 @@ export function HomePage(): React.JSX.Element {
           </button>
 
           {categories.map(
-            (categoryItem) => (
+            (
+              categoryItem,
+            ) => (
               <button
-                key={categoryItem.id}
+                key={
+                  categoryItem.id
+                }
                 type="button"
                 onClick={() =>
                   setCategory(
@@ -543,19 +616,29 @@ export function HomePage(): React.JSX.Element {
                     : 'bg-slate-100'
                 }`}
               >
-                {categoryItem.name}
+                {
+                  categoryItem.name
+                }
               </button>
             ),
           )}
         </div>
 
+        {/* PRODUTOS */}
+
         <div className="grid gap-3 md:grid-cols-2">
           {filteredProducts.map(
             (product) => (
               <ProductCard
-                key={product.id}
-                product={product}
-                promotions={promotions}
+                key={
+                  product.id
+                }
+                product={
+                  product
+                }
+                promotions={
+                  promotions
+                }
               />
             ),
           )}
@@ -568,18 +651,28 @@ export function HomePage(): React.JSX.Element {
         )}
       </div>
 
+      {/* MODAL DA PROMOÇÃO */}
+
       {selectedPromotion && (
         <PromotionModal
-          promotion={selectedPromotion}
-          products={promotionProducts}
+          promotion={
+            selectedPromotion
+          }
+          products={
+            promotionProducts
+          }
           onClose={() =>
-            setSelectedPromotion(null)
+            setSelectedPromotion(
+              null,
+            )
           }
           onSelectProduct={
             selectPromotionProduct
           }
         />
       )}
+
+      {/* MODAL DO PRODUTO */}
 
       {selectedProduct && (
         <ProductModal
@@ -590,7 +683,9 @@ export function HomePage(): React.JSX.Element {
             selectedProduct.originalPrice
           }
           onClose={() =>
-            setSelectedProduct(null)
+            setSelectedProduct(
+              null,
+            )
           }
         />
       )}
