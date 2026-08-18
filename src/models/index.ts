@@ -5,12 +5,13 @@ export interface ProductOptionItem {
   available: boolean;
 }
 
-export interface CartOptionItem extends ProductOptionItem {
+export interface CartOptionItem
+  extends ProductOptionItem {
   quantity: number;
 }
 
-
-export interface AddonCatalogItem extends ProductOptionItem {
+export interface AddonCatalogItem
+  extends ProductOptionItem {
   createdAt: string;
   updatedAt: string;
 }
@@ -23,7 +24,8 @@ export interface ProductOption {
   items: ProductOptionItem[];
 }
 
-export interface AddonGroup extends ProductOption {
+export interface AddonGroup
+  extends ProductOption {
   applicableProductIds: string[];
   active: boolean;
 }
@@ -69,7 +71,12 @@ export interface Customer {
 
 export interface Address {
   id: string;
-  label: 'Casa' | 'Apartamento' | 'Trabalho';
+
+  label:
+    | 'Casa'
+    | 'Apartamento'
+    | 'Trabalho';
+
   cep: string;
   street: string;
   number: string;
@@ -81,7 +88,15 @@ export interface Address {
   isDefault: boolean;
 }
 
-export type PaymentMethod = 'pix' | 'cash' | 'credit' | 'debit';
+export type DeliveryType =
+  | 'delivery'
+  | 'pickup';
+
+export type PaymentMethod =
+  | 'pix'
+  | 'cash'
+  | 'credit'
+  | 'debit';
 
 export interface Payment {
   method: PaymentMethod;
@@ -101,20 +116,29 @@ export type OrderStatus =
 
 export interface Order {
   id: string;
+
+  deliveryType?: DeliveryType;
+
   customer: Customer;
   address: Address;
   items: CartItem[];
+
   subtotal: number;
   deliveryFee: number;
   discount: number;
   total: number;
+
   payment: Payment;
   status: OrderStatus;
+
   createdAt: string;
   updatedAt?: string;
+
   assignedCourierId?: string;
   assignedCourierName?: string;
+
   deliveredAt?: string;
+
   cancelledAt?: string;
   cancellationReason?: string;
 }
@@ -179,8 +203,9 @@ export interface AdminUser {
   roleId: string;
 }
 
-
-export type EmployeeStatus = 'active' | 'inactive';
+export type EmployeeStatus =
+  | 'active'
+  | 'inactive';
 
 export interface Employee {
   id: string;

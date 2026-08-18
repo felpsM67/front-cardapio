@@ -2,6 +2,7 @@ import {
   useEffect,
   useState,
 } from 'react';
+
 import {
   useNavigate,
 } from 'react-router-dom';
@@ -9,6 +10,7 @@ import {
 import type {
   Address,
   Customer,
+  DeliveryType,
   Order,
   Payment,
   StoreConfig,
@@ -22,84 +24,164 @@ import { configService } from '../../services/configService';
 import { orderService } from '../../services/orderService';
 
 import { STORAGE_KEYS } from '../../constants/storage';
+
 import { formatCurrency } from '../../utils/format';
+
 import { Button } from '../../components/common/Button';
 
-export function ReviewPage() {
-  const cart = useCart();
-  const { customer } = useAuth();
-  const navigate = useNavigate();
+const pickupAddress: Address = {
+  id: 'pickup',
+  label: 'Casa',
+  cep: '',
+  street: '',
+  number: '',
+  complement: '',
+  district: '',
+  city: '',
+  state: '',
+  reference: '',
+  isDefault: false,
+};
 
-  const [saving, setSaving] = useState(false);
-  const [loadingConfig, setLoadingConfig] =
+export function ReviewPage(): React.JSX.Element {
+  const cart =
+    useCart();
+
+  const {
+    customer,
+  } = useAuth();
+
+  const navigate =
+    useNavigate();
+
+  const [
+    saving,
+    setSaving,
+  ] =
+    useState(false);
+
+  const [
+    loadingConfig,
+    setLoadingConfig,
+  ] =
     useState(true);
 
-  const [error, setError] = useState('');
+  const [
+    error,
+    setError,
+  ] =
+    useState('');
 
-  const [minimumOrder, setMinimumOrder] =
-    useState<number | null>(null);
+  const [
+    minimumOrder,
+    setMinimumOrder,
+  ] =
+    useState<number | null>(
+      null,
+    );
 
-  const [deliveryFee, setDeliveryFee] =
+  const [
+    configuredDeliveryFee,
+    setConfiguredDeliveryFee,
+  ] =
     useState(0);
 
+  /*
+   * TIPO DE RECEBIMENTO
+   *
+   * delivery = ENTREGA
+   * pickup   = RETIRADA
+   */
+  const deliveryType =
+    storageService.get<
+      DeliveryType | null
+    >(
+      STORAGE_KEYS.CHECKOUT_DELIVERY_TYPE,
+      null,
+    );
+
   const address =
-    storageService.get<Address | null>(
+    storageService.get<
+      Address | null
+    >(
       STORAGE_KEYS.CHECKOUT_ADDRESS,
       null,
     );
 
   const payment =
-    storageService.get<Payment | null>(
+    storageService.get<
+      Payment | null
+    >(
       STORAGE_KEYS.CHECKOUT_PAYMENT,
       null,
     );
 
   const storedCustomer =
-    storageService.get<Customer | null>(
+    storageService.get<
+      Customer | null
+    >(
       STORAGE_KEYS.CUSTOMER,
       null,
     );
 
   const confirmedCustomer =
-    customer ?? storedCustomer;
+    customer ??
+    storedCustomer;
 
   useEffect(() => {
+    function applyConfig(
+      config: StoreConfig,
+    ): void {
+      const configuredMinimum =
+        config.minimumOrder !==
+          null &&
+        Number(
+          config.minimumOrder,
+        ) > 0
+          ? Number(
+              config.minimumOrder,
+            )
+          : null;
+
+      setMinimumOrder(
+        configuredMinimum,
+      );
+
+      setConfiguredDeliveryFee(
+        Number(
+          config.deliveryFee,
+        ) || 0,
+      );
+    }
+
     async function loadConfig(): Promise<void> {
       try {
-        setLoadingConfig(true);
+        setLoadingConfig(
+          true,
+        );
 
         const config =
           await configService.get();
 
-        applyConfig(config);
-      } catch (configError) {
+        applyConfig(
+          config,
+        );
+      } catch (
+        configError
+      ) {
         console.error(
           'Erro ao carregar configurações:',
           configError,
         );
 
         setError(
-          'Não foi possível carregar a taxa de entrega.',
+          'Não foi possível carregar as configurações da loja.',
         );
       } finally {
-        setLoadingConfig(false);
+        setLoadingConfig(
+          false,
+        );
       }
-    }
-
-    function applyConfig(
-      config: StoreConfig,
-    ): void {
-      const configuredMinimum =
-        config.minimumOrder !== null &&
-        Number(config.minimumOrder) > 0
-          ? Number(config.minimumOrder)
-          : null;
-
-      setMinimumOrder(configuredMinimum);
-
-      setDeliveryFee(
-        Number(config.deliveryFee) || 0,
-      );
     }
 
     function handleConfigUpdate(
@@ -108,8 +190,12 @@ export function ReviewPage() {
       const customEvent =
         event as CustomEvent<StoreConfig>;
 
-      if (customEvent.detail) {
-        applyConfig(customEvent.detail);
+      if (
+        customEvent.detail
+      ) {
+        applyConfig(
+          customEvent.detail,
+        );
       }
     }
 
@@ -128,54 +214,145 @@ export function ReviewPage() {
     };
   }, []);
 
-  const amountMissing = minimumOrder
-    ? Math.max(
-        minimumOrder - cart.subtotal,
-        0,
-      )
-    : 0;
+  /*
+   * PEDIDO MÍNIMO
+   */
+
+  const amountMissing =
+    minimumOrder
+      ? Math.max(
+          minimumOrder -
+            Number(
+              cart.subtotal,
+            ),
+          0,
+        )
+      : 0;
 
   const minimumReached =
-    !minimumOrder || amountMissing === 0;
+    !minimumOrder ||
+    amountMissing === 0;
 
-  const total = Number(
+  /*
+   * FRETE
+   *
+   * RETIRADA = R$ 0,00
+   * ENTREGA = valor configurado
+   */
+  const deliveryFee =
+    deliveryType ===
+    'pickup'
+      ? 0
+      : configuredDeliveryFee;
+
+  const total =
+    Number(
+      (
+        Number(
+          cart.subtotal,
+        ) +
+        Number(
+          deliveryFee,
+        )
+      ).toFixed(2),
+    );
+
+  /*
+   * VALIDAÇÃO DA PÁGINA
+   *
+   * Endereço só é obrigatório
+   * quando for entrega.
+   */
+  const checkoutIncomplete =
+    !confirmedCustomer ||
+    !payment ||
+    !deliveryType ||
     (
-      Number(cart.subtotal) +
-      Number(deliveryFee)
-    ).toFixed(2),
-  );
+      deliveryType ===
+        'delivery' &&
+      !address
+    );
 
   if (
-    !confirmedCustomer ||
-    !address ||
-    !payment
+    checkoutIncomplete
   ) {
     return (
-      <div className="p-10 text-center">
-        Dados do checkout incompletos.
+      <div className="mx-auto max-w-lg px-4 py-16 text-center">
+        <h1 className="text-xl font-bold text-slate-900">
+          Dados do checkout incompletos
+        </h1>
+
+        <p className="mt-2 text-sm text-slate-500">
+          Volte ao carrinho e confira as informações do pedido.
+        </p>
+
+        <Button
+          className="mt-5"
+          onClick={() =>
+            navigate(
+              '/carrinho',
+            )
+          }
+        >
+          Voltar ao carrinho
+        </Button>
       </div>
     );
   }
 
   async function finish(): Promise<void> {
     setError('');
-    if (!confirmedCustomer || !address || !payment) {
-    setError('Dados do checkout incompletos.');
-    return;
-  }
-    if (loadingConfig) {
+
+    /*
+     * Cliente, pagamento e tipo
+     * são sempre obrigatórios.
+     */
+    if (
+      !confirmedCustomer ||
+      !payment ||
+      !deliveryType
+    ) {
       setError(
-        'Aguarde o carregamento das configurações.',
+        'Dados do checkout incompletos.',
       );
+
       return;
     }
 
-    if (!minimumReached) {
+    /*
+     * Endereço somente para entrega.
+     */
+    if (
+      deliveryType ===
+        'delivery' &&
+      !address
+    ) {
+      setError(
+        'O endereço de entrega não foi informado.',
+      );
+
+      return;
+    }
+
+    if (
+      loadingConfig
+    ) {
+      setError(
+        'Aguarde o carregamento das configurações.',
+      );
+
+      return;
+    }
+
+    if (
+      !minimumReached
+    ) {
       setError(
         `Faltam ${formatCurrency(
           amountMissing,
         )} para atingir o pedido mínimo.`,
       );
+
       return;
     }
 
@@ -184,20 +361,65 @@ export function ReviewPage() {
 
       const order: Order = {
         id: '',
-        customer: confirmedCustomer,
-        address,
-        items: cart.items,
-        subtotal: Number(cart.subtotal),
+
+        /*
+         * IMPORTANTE:
+         * vai para o orderService,
+         * que converte:
+         *
+         * pickup   -> RETIRADA
+         * delivery -> ENTREGA
+         */
+        deliveryType,
+
+        customer:
+          confirmedCustomer,
+
+        /*
+         * Para retirada usamos
+         * endereço vazio apenas
+         * para satisfazer o type
+         * atual do frontend.
+         *
+         * O orderService enviará
+         * null para o backend.
+         */
+        address:
+          deliveryType ===
+          'delivery'
+            ? (address as Address)
+            : pickupAddress,
+
+        items:
+          cart.items,
+
+        subtotal:
+          Number(
+            cart.subtotal,
+          ),
+
+        /*
+         * RETIRADA = zero
+         */
         deliveryFee,
+
         discount: 0,
+
         total,
+
         payment,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
+
+        status:
+          'pending',
+
+        createdAt:
+          new Date().toISOString(),
       };
 
       const savedOrder =
-        await orderService.create(order);
+        await orderService.create(
+          order,
+        );
 
       cart.clear();
 
@@ -209,15 +431,31 @@ export function ReviewPage() {
         STORAGE_KEYS.CHECKOUT_PAYMENT,
       );
 
-      navigate('/pedido/sucesso', {
-        replace: true,
-        state: {
-          orderId: String(savedOrder.id),
+      storageService.remove(
+        STORAGE_KEYS.CHECKOUT_DELIVERY_TYPE,
+      );
+
+      navigate(
+        '/pedido/sucesso',
+        {
+          replace: true,
+
+          state: {
+            orderId:
+              String(
+                savedOrder.id,
+              ),
+
+            deliveryType,
+          },
         },
-      });
-    } catch (saveError) {
+      );
+    } catch (
+      saveError
+    ) {
       setError(
-        saveError instanceof Error
+        saveError instanceof
+          Error
           ? `Não foi possível salvar o pedido: ${saveError.message}`
           : 'Não foi possível salvar o pedido no backend.',
       );
@@ -227,138 +465,264 @@ export function ReviewPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10">
-      <h1 className="text-3xl font-black">
-        Revise seu pedido
-      </h1>
+    <div className="mx-auto max-w-2xl px-4 py-8">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">
+          Revise seu pedido
+        </h1>
+
+        <p className="mt-1 text-sm text-slate-500">
+          Confira as informações antes de finalizar.
+        </p>
+      </div>
 
       <div className="mt-6 space-y-4">
-        <section className="rounded-2xl border p-5">
-          <h2 className="font-bold">
+        {/* CLIENTE */}
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-xs text-slate-400">
             Cliente
-          </h2>
+          </p>
 
-          <p>
-            {confirmedCustomer.name} ·{' '}
-            {confirmedCustomer.phone}
+          <p className="mt-1 font-semibold text-slate-900">
+            {
+              confirmedCustomer.name
+            }
+          </p>
+
+          <p className="mt-0.5 text-sm text-slate-500">
+            {
+              confirmedCustomer.phone
+            }
           </p>
         </section>
 
-        <section className="rounded-2xl border p-5">
-          <h2 className="font-bold">
-            Entrega
-          </h2>
+        {/* RECEBIMENTO */}
 
-          <p>
-            {address.street}, {address.number}
-            {' — '}
-            {address.district},{' '}
-            {address.city}/{address.state}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-xs text-slate-400">
+            Recebimento
           </p>
 
-          {address.complement && (
-            <p className="text-sm text-slate-500">
-              Complemento: {address.complement}
+          <p className="mt-1 font-semibold text-slate-900">
+            {deliveryType ===
+            'pickup'
+              ? 'Retirada na loja'
+              : 'Entrega'}
+          </p>
+
+          {deliveryType ===
+            'pickup' && (
+            <p className="mt-1 text-sm text-slate-500">
+              Você será avisado quando o pedido estiver pronto.
             </p>
           )}
 
-          {address.reference && (
-            <p className="text-sm text-slate-500">
-              Referência: {address.reference}
-            </p>
-          )}
-        </section>
+          {deliveryType ===
+            'delivery' &&
+            address && (
+              <div className="mt-2 text-sm text-slate-600">
+                <p>
+                  {
+                    address.street
+                  }
+                  ,{' '}
+                  {
+                    address.number
+                  }
+                  {' — '}
+                  {
+                    address.district
+                  }
+                  ,{' '}
+                  {
+                    address.city
+                  }
+                  /
+                  {
+                    address.state
+                  }
+                </p>
 
-        <section className="rounded-2xl border p-5">
-          <h2 className="font-bold">
-            Itens
-          </h2>
-
-          <div className="mt-3 space-y-4">
-            {cart.items.map((item) => (
-              <div
-                key={item.id}
-                className="border-b pb-3 last:border-b-0"
-              >
-                <div className="flex justify-between gap-4">
-                  <span className="font-semibold">
-                    {item.quantity}x{' '}
-                    {item.product.name}
-                  </span>
-
-                  <span className="font-bold">
-                    {formatCurrency(
-                      item.quantity *
-                        item.unitPrice,
-                    )}
-                  </span>
-                </div>
-
-                {item.selectedOptions?.length > 0 && (
-                  <div className="mt-2 pl-3 text-sm text-slate-500">
-                    {item.selectedOptions.map(
-                      (option) => (
-                        <p key={option.id}>
-                          + {option.quantity ?? 1}x{' '}
-                          {option.name}
-                          {Number(option.price) > 0
-                            ? ` — ${formatCurrency(
-                                Number(
-                                  option.price,
-                                ) *
-                                  Number(
-                                    option.quantity ??
-                                      1,
-                                  ),
-                              )}`
-                            : ''}
-                        </p>
-                      ),
-                    )}
-                  </div>
+                {address.complement && (
+                  <p className="mt-1 text-slate-500">
+                    Complemento:{' '}
+                    {
+                      address.complement
+                    }
+                  </p>
                 )}
 
-                {item.notes && (
-                  <p className="mt-2 text-sm text-slate-500">
-                    Observação: {item.notes}
+                {address.reference && (
+                  <p className="mt-1 text-slate-500">
+                    Referência:{' '}
+                    {
+                      address.reference
+                    }
                   </p>
                 )}
               </div>
-            ))}
+            )}
+        </section>
+
+        {/* PAGAMENTO */}
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-xs text-slate-400">
+            Pagamento
+          </p>
+
+          <p className="mt-1 font-semibold text-slate-900">
+            {payment.method ===
+            'pix'
+              ? 'PIX'
+              : payment.method ===
+                  'cash'
+                ? 'Dinheiro'
+                : payment.method ===
+                    'credit'
+                  ? 'Cartão de crédito'
+                  : 'Cartão de débito'}
+          </p>
+
+          {payment.method ===
+            'cash' &&
+            payment.needsChange &&
+            payment.changeFor && (
+              <p className="mt-1 text-sm text-slate-500">
+                Troco para{' '}
+                {formatCurrency(
+                  payment.changeFor,
+                )}
+              </p>
+            )}
+        </section>
+
+        {/* ITENS */}
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 className="font-semibold text-slate-900">
+            Itens
+          </h2>
+
+          <div className="mt-4 space-y-4">
+            {cart.items.map(
+              (item) => (
+                <div
+                  key={
+                    item.id
+                  }
+                  className="border-b border-slate-100 pb-4 last:border-0 last:pb-0"
+                >
+                  <div className="flex justify-between gap-4">
+                    <span className="text-sm font-medium text-slate-800">
+                      {
+                        item.quantity
+                      }
+                      x{' '}
+                      {
+                        item.product
+                          .name
+                      }
+                    </span>
+
+                    <span className="shrink-0 text-sm font-semibold">
+                      {formatCurrency(
+                        item.quantity *
+                          item.unitPrice,
+                      )}
+                    </span>
+                  </div>
+
+                  {item
+                    .selectedOptions
+                    ?.length >
+                    0 && (
+                    <div className="mt-2 pl-3 text-xs text-slate-500">
+                      {item.selectedOptions.map(
+                        (
+                          option,
+                        ) => (
+                          <p
+                            key={
+                              option.id
+                            }
+                          >
+                            +{' '}
+                            {option.quantity ??
+                              1}
+                            x{' '}
+                            {
+                              option.name
+                            }
+                          </p>
+                        ),
+                      )}
+                    </div>
+                  )}
+
+                  {item.notes && (
+                    <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      Obs:{' '}
+                      {
+                        item.notes
+                      }
+                    </p>
+                  )}
+                </div>
+              ),
+            )}
           </div>
 
-          <div className="mt-4 space-y-2 border-t pt-4">
-            <div className="flex justify-between">
-              <span>Subtotal</span>
+          {/* TOTAIS */}
 
-              <strong>
+          <div className="mt-5 space-y-2 border-t border-slate-200 pt-4 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500">
+                Subtotal
+              </span>
+
+              <span>
                 {formatCurrency(
                   cart.subtotal,
                 )}
-              </strong>
+              </span>
             </div>
 
             <div className="flex justify-between">
-              <span>Taxa de entrega</span>
+              <span className="text-slate-500">
+                {deliveryType ===
+                'pickup'
+                  ? 'Retirada'
+                  : 'Taxa de entrega'}
+              </span>
 
-              <strong>
-                {loadingConfig
-                  ? 'Carregando...'
-                  : formatCurrency(
-                      deliveryFee,
-                    )}
-              </strong>
+              <span>
+                {deliveryType ===
+                'pickup'
+                  ? 'Grátis'
+                  : loadingConfig
+                    ? 'Carregando...'
+                    : formatCurrency(
+                        deliveryFee,
+                      )}
+              </span>
             </div>
 
-            <div className="flex justify-between border-t pt-3 text-xl">
-              <strong>Total</strong>
+            <div className="flex justify-between border-t border-slate-200 pt-3 text-lg">
+              <strong>
+                Total
+              </strong>
 
               <strong
                 style={{
-                  color: 'var(--primary)',
+                  color:
+                    'var(--primary)',
                 }}
               >
-                {formatCurrency(total)}
+                {formatCurrency(
+                  total,
+                )}
               </strong>
             </div>
           </div>
@@ -369,11 +733,14 @@ export function ReviewPage() {
         <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
           Pedido mínimo de{' '}
           {formatCurrency(
-            minimumOrder ?? 0,
+            minimumOrder ??
+              0,
           )}
           . Adicione mais{' '}
-          {formatCurrency(amountMissing)} ao
-          carrinho para finalizar.
+          {formatCurrency(
+            amountMissing,
+          )}{' '}
+          ao carrinho para finalizar.
         </div>
       )}
 
@@ -382,8 +749,7 @@ export function ReviewPage() {
           {error}
 
           <p className="mt-1 font-normal">
-            O pedido não foi salvo e o
-            carrinho foi mantido.
+            O pedido não foi salvo e o carrinho foi mantido.
           </p>
         </div>
       )}
@@ -395,7 +761,9 @@ export function ReviewPage() {
           loadingConfig ||
           !minimumReached
         }
-        onClick={() => void finish()}
+        onClick={() =>
+          void finish()
+        }
       >
         {saving
           ? 'Finalizando pedido...'
@@ -407,6 +775,18 @@ export function ReviewPage() {
                   amountMissing,
                 )}`}
       </Button>
+
+      <button
+        type="button"
+        onClick={() =>
+          navigate(
+            '/checkout/pagamento',
+          )
+        }
+        className="mt-3 w-full py-2 text-sm text-slate-500"
+      >
+        Voltar
+      </button>
     </div>
   );
 }

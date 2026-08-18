@@ -305,6 +305,61 @@ export function HomePage(): React.JSX.Element {
       category,
       search,
     ]);
+  
+  const groupedProducts =
+  useMemo(() => {
+    const groups = categories
+      .map((categoryItem) => ({
+        category: categoryItem,
+
+        products:
+          filteredProducts.filter(
+            (product) =>
+              product.categoryId ===
+              categoryItem.id,
+          ),
+      }))
+      .filter(
+        (group) =>
+          group.products.length > 0,
+      );
+
+    const categoryIds = new Set(
+      categories.map(
+        (categoryItem) =>
+          categoryItem.id,
+      ),
+    );
+
+    const uncategorizedProducts =
+      filteredProducts.filter(
+        (product) =>
+          !product.categoryId ||
+          !categoryIds.has(
+            product.categoryId,
+          ),
+      );
+
+    if (
+      uncategorizedProducts.length > 0
+    ) {
+      groups.push({
+        category: {
+          id: 'uncategorized',
+          name: 'Outros',
+          active: true,
+        },
+
+        products:
+          uncategorizedProducts,
+      });
+    }
+
+    return groups;
+  }, [
+    categories,
+    filteredProducts,
+  ]); 
 
   const promotionProducts =
     useMemo(() => {
@@ -626,23 +681,53 @@ export function HomePage(): React.JSX.Element {
 
         {/* PRODUTOS */}
 
-        <div className="grid gap-3 md:grid-cols-2">
-          {filteredProducts.map(
-            (product) => (
-              <ProductCard
-                key={
-                  product.id
-                }
-                product={
-                  product
-                }
-                promotions={
-                  promotions
-                }
-              />
-            ),
-          )}
-        </div>
+        {/* PRODUTOS POR CATEGORIA */}
+
+{/* PRODUTOS POR CATEGORIA */}
+
+{groupedProducts.length > 0 ? (
+  <div className="space-y-10">
+    {groupedProducts.map(
+      (group) => (
+        <section
+          key={group.category.id}
+          className="scroll-mt-28"
+        >
+          <div className="mb-4 border-b border-slate-200 pb-3">
+            <h2 className="text-2xl font-black text-slate-900">
+              {group.category.name}
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              {group.products.length}{' '}
+              {group.products.length === 1
+                ? 'item'
+                : 'itens'}
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {group.products.map(
+              (product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  promotions={
+                    promotions
+                  }
+                />
+              ),
+            )}
+          </div>
+        </section>
+      ),
+    )}
+  </div>
+) : (
+  <p className="py-16 text-center text-slate-500">
+    Nenhum produto encontrado.
+  </p>
+)}
 
         {!filteredProducts.length && (
           <p className="py-16 text-center text-slate-500">
