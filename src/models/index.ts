@@ -101,6 +101,7 @@ export type OrderStatus =
 
 export interface Order {
   id: string;
+  deliveryType?: 'delivery' | 'pickup';
   customer: Customer;
   address: Address;
   items: CartItem[];

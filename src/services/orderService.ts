@@ -20,6 +20,7 @@ interface ApiOrder {
   codigo?: string;
   clienteNome?: string;
   clienteTelefone?: string;
+  tipoEntrega?: 'ENTREGA' | 'RETIRADA' | 'delivery' | 'pickup';
   endereco?: Record<string, unknown>;
   pagamento?: Record<string, unknown>;
   subtotal?: number | string;
@@ -159,6 +160,10 @@ function mapApiOrder(apiOrder: ApiOrder, fallbackOrder: Order): Order {
 
   return {
     id: String(apiOrder.id),
+    deliveryType:
+      apiOrder.tipoEntrega === 'RETIRADA' || apiOrder.tipoEntrega === 'pickup'
+        ? 'pickup'
+        : fallbackOrder.deliveryType ?? 'delivery',
     customer,
     address,
     items,
@@ -180,6 +185,7 @@ function buildCreatePayload(order: Order) {
   return {
     clienteNome: order.customer.name.trim(),
     clienteTelefone: order.customer.phone.replace(/\D/g, ''),
+    tipoEntrega: order.deliveryType === 'pickup' ? 'RETIRADA' : 'ENTREGA',
     endereco: {
       label: order.address.label,
       cep: order.address.cep,
