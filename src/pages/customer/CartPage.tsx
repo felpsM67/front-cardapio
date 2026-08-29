@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, LoaderCircle, MapPin, Minus, Pencil, Plus, Store, Trash2, Truck } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -181,15 +181,6 @@ useEffect(() => {
     );
   }
 
-  if (!customer) {
-    return (
-      <Navigate
-        to="/identificacao"
-        state={{ from: '/carrinho' }}
-        replace
-      />
-    );
-  }
   const currentCustomer = customer;
 
 const set = (
@@ -203,6 +194,8 @@ const set = (
 };
 
 function startPhoneEdit(): void {
+  if (!currentCustomer) return;
+
   setPhoneDraft(
     formatPhone(currentCustomer.phone),
   );
@@ -212,6 +205,8 @@ function startPhoneEdit(): void {
 }
 
 function cancelPhoneEdit(): void {
+  if (!currentCustomer) return;
+
   setPhoneDraft(
     formatPhone(currentCustomer.phone),
   );
@@ -221,6 +216,8 @@ function cancelPhoneEdit(): void {
 }
 
 function savePhoneEdit(): void {
+  if (!currentCustomer) return;
+
   const digits = onlyDigits(phoneDraft);
 
   if (
@@ -250,6 +247,8 @@ function savePhoneEdit(): void {
   setEditingPhone(false);
 }
 function saveAddress(): void {
+  if (!currentCustomer) return;
+
   if (
     !address.cep ||
     !address.street ||
@@ -290,6 +289,13 @@ function saveAddress(): void {
       return;
     }
 
+    if (!currentCustomer) {
+      navigate('/identificacao', {
+        state: { from: '/carrinho' },
+      });
+      return;
+    }
+
     if (
       deliveryType === 'delivery' &&
       (editing || !address.street)
@@ -315,7 +321,7 @@ function saveAddress(): void {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-bold uppercase tracking-wide text-slate-400">
-            Etapa 2 de 3
+            {customer ? 'Dados para finalizar' : 'Confira antes de continuar'}
           </p>
           <h1 className="mt-2 text-3xl font-black">Carrinho</h1>
         </div>
@@ -329,6 +335,7 @@ function saveAddress(): void {
           Continuar comprando
         </Link>
       </div>
+      {customer && (
       <div className="mt-2 rounded-2xl border bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -403,6 +410,7 @@ function saveAddress(): void {
           </p>
         )}
       </div>
+      )}
 
       {minimumOrder && (
         <div
@@ -470,7 +478,7 @@ function saveAddress(): void {
         </div>
       </section>
 
-      {deliveryType === 'delivery' ? (
+      {customer && (deliveryType === 'delivery' ? (
       <section className="mt-4 rounded-2xl border bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -605,7 +613,7 @@ function saveAddress(): void {
             </div>
           </div>
         </section>
-      )}
+      ))}
 
       <h2 className="mt-8 text-xl font-black">Seu pedido</h2>
       <div className="mt-3 space-y-3">
@@ -690,7 +698,9 @@ function saveAddress(): void {
         disabled={!minimumReached}
       >
         {minimumReached
-          ? 'Continuar para pagamento'
+          ? customer
+            ? 'Continuar para pagamento'
+            : 'Confirmar carrinho e continuar'
           : `Faltam ${formatCurrency(amountMissing)}`}
       </Button>
     </div>

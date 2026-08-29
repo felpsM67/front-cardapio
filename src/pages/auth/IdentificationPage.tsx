@@ -45,11 +45,11 @@ export function IdentificationPage() {
   return (
     <form onSubmit={submit} className="mx-auto max-w-md px-4 py-16">
       <p className="text-sm font-bold uppercase tracking-wide text-slate-400">
-        Etapa 1 de 3
+        Identificação do cliente
       </p>
       <h1 className="mt-2 text-3xl font-black">Cadastro do cliente</h1>
       <p className="mt-2 text-slate-500">
-        Informe seus dados antes de visualizar o checkout. Assim conseguimos
+        Seu carrinho já está confirmado. Informe seus dados para continuar e
         recuperar o último endereço usado por este telefone.
       </p>
 
