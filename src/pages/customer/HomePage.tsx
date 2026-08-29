@@ -306,6 +306,45 @@ export function HomePage(): React.JSX.Element {
       search,
     ]);
 
+  const productGroups = useMemo(() => {
+    const visibleCategories =
+      category === 'all'
+        ? categories
+        : categories.filter(
+            (item) => item.id === category,
+          );
+
+    const groups = visibleCategories
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        products: filteredProducts.filter(
+          (product) =>
+            product.categoryId === item.id,
+        ),
+      }))
+      .filter((group) => group.products.length > 0);
+
+    if (category === 'all') {
+      const categoryIds = new Set(
+        categories.map((item) => item.id),
+      );
+      const uncategorizedProducts = filteredProducts.filter(
+        (product) => !categoryIds.has(product.categoryId),
+      );
+
+      if (uncategorizedProducts.length > 0) {
+        groups.push({
+          id: 'uncategorized',
+          name: 'Outros',
+          products: uncategorizedProducts,
+        });
+      }
+    }
+
+    return groups;
+  }, [categories, category, filteredProducts]);
+
   const promotionProducts =
     useMemo(() => {
       if (!selectedPromotion) {
@@ -626,22 +665,37 @@ export function HomePage(): React.JSX.Element {
 
         {/* PRODUTOS */}
 
-        <div className="grid gap-3 md:grid-cols-2">
-          {filteredProducts.map(
-            (product) => (
-              <ProductCard
-                key={
-                  product.id
-                }
-                product={
-                  product
-                }
-                promotions={
-                  promotions
-                }
-              />
-            ),
-          )}
+        <div className="space-y-9">
+          {productGroups.map((group) => (
+            <section
+              key={group.id}
+              aria-labelledby={`category-${group.id}`}
+              className="scroll-mt-24"
+            >
+              <div className="mb-3 flex items-end justify-between gap-3 border-b border-slate-200 pb-2">
+                <h2
+                  id={`category-${group.id}`}
+                  className="text-2xl font-black text-slate-900"
+                >
+                  {group.name}
+                </h2>
+                <span className="text-sm font-semibold text-slate-400">
+                  {group.products.length}{' '}
+                  {group.products.length === 1 ? 'item' : 'itens'}
+                </span>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                {group.products.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    promotions={promotions}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
 
         {!filteredProducts.length && (

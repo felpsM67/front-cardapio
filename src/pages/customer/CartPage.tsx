@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { ArrowLeft, LoaderCircle, MapPin, Minus, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, LoaderCircle, MapPin, Minus, Pencil, Plus, Store, Trash2, Truck } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency } from '../../utils/format';
@@ -28,6 +28,8 @@ const blankAddress: Address = {
   isDefault: true,
 };
 
+type DeliveryType = 'delivery' | 'pickup';
+
 export function CartPage() {
   const cart = useCart();
   const { customer, setCustomer } = useAuth();
@@ -37,6 +39,13 @@ export function CartPage() {
 
 const [deliveryFee, setDeliveryFee] =
   useState(0);
+
+  const [deliveryType, setDeliveryType] = useState<DeliveryType>(() =>
+    storageService.get<DeliveryType>(
+      STORAGE_KEYS.CHECKOUT_DELIVERY_TYPE,
+      'delivery',
+    ),
+  );
 
 useEffect(() => {
   async function loadConfig(): Promise<void> {
@@ -83,6 +92,8 @@ useEffect(() => {
     ? Math.max(minimumOrder - cart.subtotal, 0)
     : 0;
   const minimumReached = !minimumOrder || amountMissing === 0;
+  const checkoutDeliveryFee =
+    deliveryType === 'delivery' ? deliveryFee : 0;
 
   const [address, setAddress] = useState<Address>(() => {
     const checkoutAddress = storageService.get<Address | null>(
@@ -263,6 +274,14 @@ function saveAddress(): void {
   setEditing(false);
 }
 
+  function selectDeliveryType(nextType: DeliveryType): void {
+    setDeliveryType(nextType);
+    storageService.set(
+      STORAGE_KEYS.CHECKOUT_DELIVERY_TYPE,
+      nextType,
+    );
+  }
+
   function next() {
     if (!minimumReached) {
       alert(
@@ -271,12 +290,23 @@ function saveAddress(): void {
       return;
     }
 
-    if (editing || !address.street) {
+    if (
+      deliveryType === 'delivery' &&
+      (editing || !address.street)
+    ) {
       alert('Salve o endereço de entrega antes de continuar.');
       return;
     }
 
-    persistCheckoutAddress(address);
+    storageService.set(
+      STORAGE_KEYS.CHECKOUT_DELIVERY_TYPE,
+      deliveryType,
+    );
+
+    if (deliveryType === 'delivery') {
+      persistCheckoutAddress(address);
+    }
+
     navigate('/checkout/pagamento');
   }
 
@@ -345,7 +375,7 @@ function saveAddress(): void {
                   cancelPhoneEdit();
                 }
               }}
-              maxLength={15}
+              maxLength={14}
             />
 
             {phoneError && (
@@ -392,6 +422,56 @@ function saveAddress(): void {
       )}
 
       <section className="mt-6 rounded-2xl border bg-white p-5 shadow-sm">
+        <div>
+          <h2 className="font-black">Como você quer receber?</h2>
+          <p className="text-sm text-slate-500">
+            Escolha entrega no endereço ou retirada diretamente na loja.
+          </p>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => selectDeliveryType('delivery')}
+            aria-pressed={deliveryType === 'delivery'}
+            className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${
+              deliveryType === 'delivery'
+                ? 'bg-orange-50 shadow-sm'
+                : 'hover:bg-slate-50'
+            }`}
+            style={deliveryType === 'delivery' ? { borderColor: 'var(--primary)' } : undefined}
+          >
+            <Truck size={22} style={{ color: 'var(--primary)' }} />
+            <span>
+              <strong className="block">Receber em casa</strong>
+              <small className="text-slate-500">
+                Taxa de {formatCurrency(deliveryFee)}
+              </small>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => selectDeliveryType('pickup')}
+            aria-pressed={deliveryType === 'pickup'}
+            className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${
+              deliveryType === 'pickup'
+                ? 'bg-orange-50 shadow-sm'
+                : 'hover:bg-slate-50'
+            }`}
+            style={deliveryType === 'pickup' ? { borderColor: 'var(--primary)' } : undefined}
+          >
+            <Store size={22} style={{ color: 'var(--primary)' }} />
+            <span>
+              <strong className="block">Retirar na loja</strong>
+              <small className="text-slate-500">Sem taxa de entrega</small>
+            </span>
+          </button>
+        </div>
+      </section>
+
+      {deliveryType === 'delivery' ? (
+      <section className="mt-4 rounded-2xl border bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <MapPin style={{ color: 'var(--primary)' }} />
@@ -513,6 +593,19 @@ function saveAddress(): void {
           </div>
         )}
       </section>
+      ) : (
+        <section className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900">
+          <div className="flex gap-3">
+            <Store className="mt-0.5 shrink-0" size={22} />
+            <div>
+              <h2 className="font-black">Retirada na loja selecionada</h2>
+              <p className="mt-1 text-sm">
+                Você não precisa informar endereço e nenhuma taxa de entrega será cobrada.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       <h2 className="mt-8 text-xl font-black">Seu pedido</h2>
       <div className="mt-3 space-y-3">
@@ -578,12 +671,16 @@ function saveAddress(): void {
           <b>{formatCurrency(cart.subtotal)}</b>
         </div>
         <div className="mt-2 flex justify-between">
-          <span>Entrega</span>
-          <b>{formatCurrency(deliveryFee)}</b>
+          <span>{deliveryType === 'delivery' ? 'Entrega' : 'Retirada na loja'}</span>
+          <b>
+            {deliveryType === 'delivery'
+              ? formatCurrency(checkoutDeliveryFee)
+              : 'Grátis'}
+          </b>
         </div>
         <div className="mt-4 flex justify-between border-t pt-4 text-xl">
           <b>Total</b>
-          <b>{formatCurrency(cart.subtotal + deliveryFee)}</b>
+          <b>{formatCurrency(cart.subtotal + checkoutDeliveryFee)}</b>
         </div>
       </div>
 

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
-import { onlyDigits } from '../../utils/format';
+import { formatPhone, onlyDigits } from '../../utils/format';
 import { authService } from '../../services/authService';
 import { useAuth } from '../../contexts/AuthContext';
 import { STORAGE_KEYS } from '../../constants/storage';
@@ -16,7 +16,7 @@ export function IdentificationPage() {
   const { customer, setCustomer } = useAuth();
   const [name, setName] = useState(customer?.name ?? '');
   const [phone, setPhone] = useState(
-    customer?.phone ? onlyDigits(customer.phone).slice(0, 11) : '',
+    customer?.phone ? formatPhone(customer.phone) : '',
   );
   const navigate = useNavigate();
   const location = useLocation();
@@ -62,12 +62,12 @@ export function IdentificationPage() {
         <Input
           type="tel"
           inputMode="numeric"
-          pattern="[0-9]*"
-          maxLength={11}
-          placeholder="67999999999"
+          autoComplete="tel"
+          maxLength={14}
+          placeholder="67 9 9664-3969"
           value={phone}
           onChange={(event) =>
-            setPhone(onlyDigits(event.target.value).slice(0, 11))
+            setPhone(formatPhone(event.target.value))
           }
         />
         <Button className="w-full">Continuar para o carrinho</Button>

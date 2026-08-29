@@ -1,6 +1,6 @@
 import type { Order } from '../models';
 import { configService } from '../services/configService';
-import { formatCurrency } from './format';
+import { formatCurrency, formatPhone } from './format';
 
 export async function generateOrderMessage(
   order: Order,
@@ -9,6 +9,7 @@ export async function generateOrderMessage(
     await configService.get();
 
   const address = order.address;
+  const isPickup = order.deliveryType === 'pickup';
 
   const items = order.items
     .map((item) => {
@@ -89,16 +90,16 @@ export async function generateOrderMessage(
     `NOVO PEDIDO #${order.id}`,
     '',
     `Cliente: ${order.customer.name}`,
-    `Telefone: ${order.customer.phone}`,
+    `Telefone: ${formatPhone(order.customer.phone)}`,
     '',
-    'ENDEREÇO',
-    `${address.street}, ${address.number}`,
-    `Bairro: ${address.district}`,
-    `${address.city} - ${address.state}`,
-    address.complement
+    isPickup ? 'RETIRADA NA LOJA' : 'ENDEREÇO DE ENTREGA',
+    isPickup ? 'Cliente retira o pedido no balcão.' : `${address.street}, ${address.number}`,
+    !isPickup ? `Bairro: ${address.district}` : '',
+    !isPickup ? `${address.city} - ${address.state}` : '',
+    !isPickup && address.complement
       ? `Complemento: ${address.complement}`
       : '',
-    address.reference
+    !isPickup && address.reference
       ? `Referência: ${address.reference}`
       : '',
     '',
@@ -108,9 +109,9 @@ export async function generateOrderMessage(
     `Subtotal: ${formatCurrency(
       order.subtotal,
     )}`,
-    `Taxa de entrega: ${formatCurrency(
-      order.deliveryFee,
-    )}`,
+    isPickup
+      ? 'Taxa de entrega: Grátis'
+      : `Taxa de entrega: ${formatCurrency(order.deliveryFee)}`,
     `Total: ${formatCurrency(
       order.total,
     )}`,

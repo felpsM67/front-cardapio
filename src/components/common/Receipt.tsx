@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import type { Order } from '../../models';
-import { formatCurrency } from '../../utils/format';
+import { formatCurrency, formatPhone } from '../../utils/format';
 
 interface ReceiptProps {
   order: Order;
@@ -33,9 +33,14 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
         <div>
           <strong>Cliente:</strong> {order.customer.name}
         </div>
-        <div>{order.customer.phone}</div>
+        <div>{formatPhone(order.customer.phone)}</div>
 
-        {address && (
+        {order.deliveryType === 'pickup' ? (
+          <>
+            <div className="receipt-divider" />
+            <div><strong>Retirada na loja</strong></div>
+          </>
+        ) : address && (
           <>
             <div className="receipt-divider" />
             <div>
@@ -92,8 +97,12 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
           <span>{formatCurrency(order.subtotal)}</span>
         </div>
         <div className="receipt-item-row">
-          <span>Entrega</span>
-          <span>{formatCurrency(order.deliveryFee)}</span>
+          <span>{order.deliveryType === 'pickup' ? 'Retirada' : 'Entrega'}</span>
+          <span>
+            {order.deliveryType === 'pickup'
+              ? 'Grátis'
+              : formatCurrency(order.deliveryFee)}
+          </span>
         </div>
         {order.discount > 0 && (
           <div className="receipt-item-row">

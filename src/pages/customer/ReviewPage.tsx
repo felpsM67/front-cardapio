@@ -22,8 +22,22 @@ import { configService } from '../../services/configService';
 import { orderService } from '../../services/orderService';
 
 import { STORAGE_KEYS } from '../../constants/storage';
-import { formatCurrency } from '../../utils/format';
+import { formatCurrency, formatPhone } from '../../utils/format';
 import { Button } from '../../components/common/Button';
+
+const pickupAddress: Address = {
+  id: 'store-pickup',
+  label: 'Trabalho',
+  cep: '',
+  street: '',
+  number: '',
+  complement: '',
+  district: '',
+  city: '',
+  state: '',
+  reference: '',
+  isDefault: false,
+};
 
 export function ReviewPage() {
   const cart = useCart();
@@ -46,6 +60,12 @@ export function ReviewPage() {
     storageService.get<Address | null>(
       STORAGE_KEYS.CHECKOUT_ADDRESS,
       null,
+    );
+
+  const deliveryType =
+    storageService.get<'delivery' | 'pickup'>(
+      STORAGE_KEYS.CHECKOUT_DELIVERY_TYPE,
+      'delivery',
     );
 
   const payment =
@@ -138,16 +158,19 @@ export function ReviewPage() {
   const minimumReached =
     !minimumOrder || amountMissing === 0;
 
+  const checkoutDeliveryFee =
+    deliveryType === 'delivery' ? deliveryFee : 0;
+
   const total = Number(
     (
       Number(cart.subtotal) +
-      Number(deliveryFee)
+      Number(checkoutDeliveryFee)
     ).toFixed(2),
   );
 
   if (
     !confirmedCustomer ||
-    !address ||
+    (deliveryType === 'delivery' && !address) ||
     !payment
   ) {
     return (
@@ -159,10 +182,14 @@ export function ReviewPage() {
 
   async function finish(): Promise<void> {
     setError('');
-    if (!confirmedCustomer || !address || !payment) {
-    setError('Dados do checkout incompletos.');
-    return;
-  }
+    if (
+      !confirmedCustomer ||
+      (deliveryType === 'delivery' && !address) ||
+      !payment
+    ) {
+      setError('Dados do checkout incompletos.');
+      return;
+    }
     if (loadingConfig) {
       setError(
         'Aguarde o carregamento das configurações.',
@@ -184,11 +211,12 @@ export function ReviewPage() {
 
       const order: Order = {
         id: '',
+        deliveryType,
         customer: confirmedCustomer,
-        address,
+        address: address ?? pickupAddress,
         items: cart.items,
         subtotal: Number(cart.subtotal),
-        deliveryFee,
+        deliveryFee: checkoutDeliveryFee,
         discount: 0,
         total,
         payment,
@@ -207,6 +235,10 @@ export function ReviewPage() {
 
       storageService.remove(
         STORAGE_KEYS.CHECKOUT_PAYMENT,
+      );
+
+      storageService.remove(
+        STORAGE_KEYS.CHECKOUT_DELIVERY_TYPE,
       );
 
       navigate('/pedido/sucesso', {
@@ -240,33 +272,39 @@ export function ReviewPage() {
 
           <p>
             {confirmedCustomer.name} ·{' '}
-            {confirmedCustomer.phone}
+            {formatPhone(confirmedCustomer.phone)}
           </p>
         </section>
 
         <section className="rounded-2xl border p-5">
           <h2 className="font-bold">
-            Entrega
+            {deliveryType === 'pickup' ? 'Retirada na loja' : 'Entrega'}
           </h2>
 
-          <p>
-            {address.street}, {address.number}
-            {' — '}
-            {address.district},{' '}
-            {address.city}/{address.state}
-          </p>
-
-          {address.complement && (
-            <p className="text-sm text-slate-500">
-              Complemento: {address.complement}
+          {deliveryType === 'pickup' ? (
+            <p className="text-sm text-slate-600">
+              O pedido será retirado no balcão da loja, sem taxa de entrega.
             </p>
-          )}
-
-          {address.reference && (
-            <p className="text-sm text-slate-500">
-              Referência: {address.reference}
-            </p>
-          )}
+          ) : address ? (
+            <>
+              <p>
+                {address.street}, {address.number}
+                {' — '}
+                {address.district},{' '}
+                {address.city}/{address.state}
+              </p>
+              {address.complement && (
+                <p className="text-sm text-slate-500">
+                  Complemento: {address.complement}
+                </p>
+              )}
+              {address.reference && (
+                <p className="text-sm text-slate-500">
+                  Referência: {address.reference}
+                </p>
+              )}
+            </>
+          ) : null}
         </section>
 
         <section className="rounded-2xl border p-5">
@@ -339,14 +377,16 @@ export function ReviewPage() {
             </div>
 
             <div className="flex justify-between">
-              <span>Taxa de entrega</span>
+              <span>
+                {deliveryType === 'pickup' ? 'Retirada na loja' : 'Taxa de entrega'}
+              </span>
 
               <strong>
                 {loadingConfig
                   ? 'Carregando...'
-                  : formatCurrency(
-                      deliveryFee,
-                    )}
+                  : deliveryType === 'pickup'
+                    ? 'Grátis'
+                    : formatCurrency(checkoutDeliveryFee)}
               </strong>
             </div>
 

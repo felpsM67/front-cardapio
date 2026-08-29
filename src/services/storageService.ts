@@ -6,6 +6,7 @@ const TEMPORARY_KEYS = new Set([
   'digital-menu-admin-session',
   'digital-menu-checkout-payment',
   'digital-menu-checkout-address',
+  'digital-menu-checkout-delivery-type',
   'digital-menu-addresses',
   'digital-menu-addons',
   'digital-menu-addon-catalog',

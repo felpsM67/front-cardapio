@@ -161,7 +161,9 @@ function mapApiOrder(apiOrder: ApiOrder, fallbackOrder: Order): Order {
   return {
     id: String(apiOrder.id),
     deliveryType:
-      apiOrder.tipoEntrega === 'RETIRADA' || apiOrder.tipoEntrega === 'pickup'
+      apiOrder.tipoEntrega === 'RETIRADA' ||
+      apiOrder.tipoEntrega === 'pickup' ||
+      apiOrder.endereco?.tipoEntrega === 'RETIRADA'
         ? 'pickup'
         : fallbackOrder.deliveryType ?? 'delivery',
     customer,
@@ -186,7 +188,7 @@ function buildCreatePayload(order: Order) {
     clienteNome: order.customer.name.trim(),
     clienteTelefone: order.customer.phone.replace(/\D/g, ''),
     tipoEntrega: order.deliveryType === 'pickup' ? 'RETIRADA' : 'ENTREGA',
-    endereco: {
+    endereco: order.deliveryType === 'pickup' ? null : {
       label: order.address.label,
       cep: order.address.cep,
       street: order.address.street,

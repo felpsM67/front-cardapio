@@ -15,6 +15,10 @@ import { storageService } from '../../services/storageService';
 import { formatCurrency } from '../../utils/format';
 
 export function PaymentPage() {
+  const deliveryType = storageService.get<'delivery' | 'pickup'>(
+    STORAGE_KEYS.CHECKOUT_DELIVERY_TYPE,
+    'delivery',
+  );
   const [method, setMethod] =
     useState<PaymentMethod>('pix');
 
@@ -60,8 +64,11 @@ export function PaymentPage() {
     void loadConfig();
   }, []);
 
+  const checkoutDeliveryFee =
+    deliveryType === 'delivery' ? deliveryFee : 0;
+
   const total =
-    Number(cart.subtotal) + deliveryFee;
+    Number(cart.subtotal) + checkoutDeliveryFee;
 
   function next(): void {
     const amount = Number(
@@ -195,8 +202,8 @@ export function PaymentPage() {
       {(method === 'credit' ||
         method === 'debit') && (
         <p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm">
-          O pagamento será realizado na
-          entrega com a máquina de cartão.
+          O pagamento será realizado na{' '}
+          {deliveryType === 'pickup' ? 'retirada' : 'entrega'} com a máquina de cartão.
         </p>
       )}
 
