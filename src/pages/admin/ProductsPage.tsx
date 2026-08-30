@@ -597,6 +597,8 @@ export function ProductsPage() {
     }
 
     try {
+      await productService.remove(product.id);
+
       const groups =
         await addonGroupService.getForProduct(
           product.id,
@@ -605,8 +607,6 @@ export function ProductsPage() {
       for (const group of groups) {
         await addonGroupService.remove(group.id);
       }
-
-      await productService.remove(product.id);
       await loadAddonData();
 
       refresh((value) => value + 1);
