@@ -271,7 +271,7 @@ export function ProductModal({
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder="Ex.: sem cebola, molho separado..."
+              placeholder="Adicione uma observação"
               className="min-h-24 w-full rounded-xl border p-3"
             />
           </label>

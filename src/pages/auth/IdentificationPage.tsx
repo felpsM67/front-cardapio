@@ -64,7 +64,7 @@ export function IdentificationPage() {
           inputMode="numeric"
           autoComplete="tel"
           maxLength={14}
-          placeholder="67 9 9664-3969"
+          placeholder="67 9 9999-9999"
           value={phone}
           onChange={(event) =>
             setPhone(formatPhone(event.target.value))
