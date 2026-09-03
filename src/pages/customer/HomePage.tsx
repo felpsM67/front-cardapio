@@ -406,68 +406,118 @@ export function HomePage(): React.JSX.Element {
     return <HomeSkeleton />;
   }
 
+  const storeInitial =
+    config.storeName.trim().charAt(0).toUpperCase() ||
+    'L';
+
   return (
     <div>
       {/* CAPA */}
 
-      <section className="relative h-52 overflow-hidden bg-slate-900 sm:h-64">
-        {config.coverUrl ? (
-          <img
-            src={config.coverUrl}
-            alt={
-              config.storeName ||
-              'Capa da loja'
-            }
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="h-full w-full bg-slate-800" />
-        )}
+      <section className="border-b border-slate-200 bg-white">
+        <div className="relative h-36 overflow-hidden bg-slate-200 sm:h-48">
+          {config.coverUrl ? (
+            <img
+              src={config.coverUrl}
+              alt={
+                config.storeName ||
+                'Capa da loja'
+              }
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div
+              className="h-full w-full"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--primary), #0f172a)',
+              }}
+            />
+          )}
 
-        <div className="absolute inset-0 bg-black/50" />
+          <div className="absolute inset-0 bg-black/10" />
+        </div>
 
-        <div className="absolute inset-0 mx-auto flex max-w-6xl flex-col justify-end px-4 pb-6 text-white">
-          <span
-            className={`mb-2 w-fit rounded-full px-3 py-1 text-sm ${
-              config.isOpen
-                ? 'bg-green-600'
-                : 'bg-red-600'
-            }`}
-          >
-            {config.isOpen
-              ? 'Aberto agora'
-              : 'Fechado'}
-          </span>
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="-mt-9 flex items-end justify-between gap-4 sm:-mt-10">
+            <div
+              aria-hidden="true"
+              className="relative grid h-20 w-20 shrink-0 place-items-center rounded-2xl border-4 border-white text-3xl font-black text-white shadow-md sm:h-24 sm:w-24"
+              style={{
+                backgroundColor:
+                  'var(--primary)',
+              }}
+            >
+              {storeInitial}
+            </div>
 
-          <h1 className="text-3xl font-black">
-            {config.storeName ||
-              'Cardápio'}
-          </h1>
+            <span
+              className={`mb-1 flex items-center gap-2 text-sm font-semibold ${
+                config.isOpen
+                  ? 'text-emerald-600'
+                  : 'text-rose-600'
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-current" />
 
-          <p>
-            {config.description}
-          </p>
-
-          <div className="mt-2 flex flex-wrap gap-4 text-sm">
-            <span className="flex items-center gap-1">
-              <Clock size={18} />
-
-              {config.openingHours ||
-                'Horário não informado'}
+              {config.isOpen
+                ? 'Aberto agora'
+                : 'Fechado'}
             </span>
+          </div>
 
-            <span className="flex items-center gap-1">
-              <Truck size={18} />
+          <div className="pb-5 pt-3">
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
+              {config.storeName ||
+                'Cardápio'}
+            </h1>
 
-              {formatCurrency(
-                config.deliveryFee,
-              )}
-            </span>
+            {config.description && (
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500 sm:text-base">
+                {config.description}
+              </p>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-slate-600">
+              <span className="flex items-center gap-1.5">
+                <Clock size={16} />
+
+                {config.openingHours ||
+                  'Horário não informado'}
+              </span>
+
+              <span className="flex items-center gap-1.5">
+                <Truck size={16} />
+
+                {config.deliveryFee > 0
+                  ? `Entrega ${formatCurrency(
+                      config.deliveryFee,
+                    )}`
+                  : 'Entrega grátis'}
+              </span>
+            </div>
           </div>
         </div>
       </section>
 
       <div className="mx-auto max-w-6xl px-4 py-6">
+        {/* BUSCA */}
+
+        <div className="relative mb-7">
+          <Search className="absolute left-4 top-3.5 text-slate-400" />
+
+          <input
+            value={search}
+            onChange={(event) =>
+              setSearch(
+                event.target.value,
+              )
+            }
+            placeholder="Buscar no cardápio"
+            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-12 pr-4 shadow-sm outline-none transition focus:border-slate-300 focus:ring-2"
+          />
+        </div>
+
         {/* PROMOÇÕES */}
 
         {promotions.length > 0 && (
@@ -580,23 +630,6 @@ export function HomePage(): React.JSX.Element {
             </div>
           </section>
         )}
-
-        {/* BUSCA */}
-
-        <div className="relative">
-          <Search className="absolute left-4 top-3.5 text-slate-400" />
-
-          <input
-            value={search}
-            onChange={(event) =>
-              setSearch(
-                event.target.value,
-              )
-            }
-            placeholder="Buscar no cardápio"
-            className="w-full rounded-2xl border py-3 pl-12 pr-4 outline-none focus:ring-2"
-          />
-        </div>
 
         {/* CATEGORIAS */}
 

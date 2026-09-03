@@ -109,22 +109,21 @@ export function Header(): React.JSX.Element {
   }, [lastAddedAt]);
 
   return (
-    <header className="border-b bg-white">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16">
         <Link
           to="/"
-          className="text-xl font-black"
-          style={{
-            color: 'var(--primary)',
-          }}
+          className="min-w-0"
         >
           {loadingConfig ? (
             <span
               aria-label="Carregando nome da loja"
-              className="inline-block h-6 w-32 animate-pulse rounded-md bg-slate-200"
+              className="block h-5 w-32 animate-pulse rounded-md bg-slate-200"
             />
           ) : (
-            storeName
+            <span className="block truncate text-lg font-bold text-slate-900 sm:text-xl">
+              {storeName}
+            </span>
           )}
         </Link>
 
@@ -132,7 +131,7 @@ export function Header(): React.JSX.Element {
           <Link
             to="/carrinho"
             aria-label={`Abrir sacola com ${count} item(ns)`}
-            className={`relative rounded-full p-2 transition hover:bg-slate-100 ${
+            className={`relative grid h-10 w-10 place-items-center rounded-full text-slate-800 transition hover:bg-slate-100 ${
               animating
                 ? 'cart-bag-added'
                 : ''
